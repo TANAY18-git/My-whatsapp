@@ -966,12 +966,16 @@ const Chat = ({ user, setUser }) => {
             exit={{ x: -300, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className={`w-full md:w-1/3 lg:w-1/4 border-r flex flex-col ${mobileView ? 'absolute z-10 h-full' : ''}`}
-            style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}
+            style={{
+              backgroundColor: 'var(--bg-panel)',
+              borderColor: 'var(--border-color)',
+              boxShadow: mobileView ? '0 4px 12px rgba(0, 0, 0, 0.15)' : 'none'
+            }}
           >
-            <div className="p-4 border-b border-gray-200 bg-primary text-white flex justify-between items-center">
+            <div className="mobile-header p-4 border-b border-gray-200 bg-primary text-white flex justify-between items-center">
               <div className="flex items-center space-x-2">
                 <div
-                  className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center overflow-hidden cursor-pointer"
+                  className="mobile-avatar w-10 h-10 rounded-full bg-white/20 flex items-center justify-center overflow-hidden cursor-pointer"
                   onClick={() => setShowProfileModal(true)}
                   title="Update profile photo"
                 >
@@ -985,13 +989,17 @@ const Chat = ({ user, setUser }) => {
                     <span className="text-lg font-semibold">{user?.name?.charAt(0)}</span>
                   )}
                 </div>
-                <h2 className="font-semibold">{user?.name}</h2>
+                <div>
+                  <h2 className="font-semibold text-sm md:text-base">{user?.name}</h2>
+                  <p className="text-xs text-white/70 hidden sm:block">Online</p>
+                </div>
               </div>
-              <div className="flex space-x-2">
+              <div className="flex space-x-1 md:space-x-2">
                 {mobileView && (
                   <button
                     onClick={() => setShowContacts(false)}
-                    className="p-2 rounded-full hover:bg-white/20"
+                    className="mobile-btn p-2 rounded-full hover:bg-white/20"
+                    aria-label="Close sidebar"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M18 6L6 18M6 6l12 12" />
@@ -1001,7 +1009,8 @@ const Chat = ({ user, setUser }) => {
                 <ThemeToggle />
                 <button
                   onClick={handleLogout}
-                  className="p-2 rounded-full hover:bg-white/20"
+                  className="mobile-btn p-2 rounded-full hover:bg-white/20"
+                  aria-label="Logout"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -1012,13 +1021,13 @@ const Chat = ({ user, setUser }) => {
               </div>
             </div>
 
-            <div className="p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Chats</h2>
-                <div className="flex space-x-2">
+            <div className="p-3 sm:p-4">
+              <div className="flex justify-between items-center mb-3 sm:mb-4">
+                <h2 className="text-lg sm:text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Chats</h2>
+                <div className="flex space-x-1 sm:space-x-2">
                   <button
                     onClick={() => setShowAddContactModal(true)}
-                    className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                     title="Add Contact"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1030,7 +1039,7 @@ const Chat = ({ user, setUser }) => {
                   </button>
                   <button
                     onClick={() => setShowCreateGroupModal(true)}
-                    className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                     title="Create Group"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1042,16 +1051,22 @@ const Chat = ({ user, setUser }) => {
                   <ThemeToggle />
                 </div>
               </div>
-              <Input
-                type="text"
-                placeholder="Search contacts and groups..."
-                className="w-full"
-                value={contactSearchQuery}
-                onChange={(e) => setContactSearchQuery(e.target.value)}
-              />
+              <div className="relative">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <Input
+                  type="text"
+                  placeholder="Search contacts and groups..."
+                  className="w-full pl-10 mobile-input"
+                  value={contactSearchQuery}
+                  onChange={(e) => setContactSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
               {loading ? (
                 <div className="flex justify-center items-center h-full">
                   <motion.div
@@ -1062,7 +1077,11 @@ const Chat = ({ user, setUser }) => {
                 </div>
               ) : contacts.length === 0 && groups.length === 0 ? (
                 <div className="text-center p-6 text-gray-500">
-                  No contacts or groups found
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <p className="text-lg font-medium">No contacts or groups found</p>
+                  <p className="mt-1">Click the "Add Contact" button to get started</p>
                 </div>
               ) : (
                 <>
@@ -1087,14 +1106,14 @@ const Chat = ({ user, setUser }) => {
                               setSelectedContact(null);
                               if (mobileView) setShowContacts(false);
                             }}
-                            className={`p-4 border-b cursor-pointer flex items-center space-x-3`}
+                            className={`mobile-contact-item p-3 sm:p-4 border-b cursor-pointer flex items-center space-x-3`}
                             style={{
                               borderColor: 'var(--border-color)',
                               backgroundColor: selectedGroup?._id === group._id ? 'var(--bg-hover)' : 'transparent'
                             }}
                           >
                             <div className="relative">
-                              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                              <div className="mobile-avatar w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                                 {group.groupPhoto ? (
                                   <img
                                     src={group.groupPhoto}
@@ -1106,8 +1125,8 @@ const Chat = ({ user, setUser }) => {
                                 )}
                               </div>
                             </div>
-                            <div className="flex-1">
-                              <h3 className="font-medium" style={{ color: 'var(--text-primary)' }}>{group.name}</h3>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{group.name}</h3>
                               <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
                                 {group.members.length} members
                               </p>
@@ -1127,6 +1146,7 @@ const Chat = ({ user, setUser }) => {
                         .filter(contact =>
                           !contactSearchQuery ||
                           (contact?.name && contact.name.toLowerCase().includes(contactSearchQuery.toLowerCase())) ||
+                          (contact?.username && contact.username.toLowerCase().includes(contactSearchQuery.toLowerCase())) ||
                           (contact?.email && contact.email.toLowerCase().includes(contactSearchQuery.toLowerCase()))
                         )
                         .map((contact) => (
@@ -1139,14 +1159,14 @@ const Chat = ({ user, setUser }) => {
                               setSelectedGroup(null);
                               if (mobileView) setShowContacts(false);
                             }}
-                            className={`p-4 border-b cursor-pointer flex items-center space-x-3`}
+                            className={`mobile-contact-item p-3 sm:p-4 border-b cursor-pointer flex items-center space-x-3`}
                             style={{
                               borderColor: 'var(--border-color)',
                               backgroundColor: selectedContact?._id === contact._id ? 'var(--bg-hover)' : 'transparent'
                             }}
                           >
                             <div className="relative">
-                              <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                              <div className="mobile-avatar w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
                                 {contact.profilePhoto ? (
                                   <img
                                     src={contact.profilePhoto}
@@ -1161,11 +1181,21 @@ const Chat = ({ user, setUser }) => {
                                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
                               )}
                             </div>
-                            <div className="flex-1">
-                              <h3 className="font-medium" style={{ color: 'var(--text-primary)' }}>{contact.name}</h3>
-                              <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
-                                {contact.email}
-                              </p>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between items-center">
+                                <h3 className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{contact.name}</h3>
+                                <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
+                                  {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
+                                  {contact.username ? `@${contact.username}` : contact.email}
+                                </p>
+                                {isOnline(contact._id) && (
+                                  <span className="text-xs text-green-500 ml-1 whitespace-nowrap">online</span>
+                                )}
+                              </div>
                             </div>
                           </motion.div>
                         ))}
@@ -1182,12 +1212,13 @@ const Chat = ({ user, setUser }) => {
       <div className="flex-1 flex flex-col">
         {selectedContact ? (
           <>
-            <div className="p-4 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
-              <div className="flex items-center space-x-3">
+            <div className="mobile-header p-3 sm:p-4 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 {mobileView && (
                   <button
                     onClick={() => setShowContacts(true)}
-                    className="p-2 rounded-full hover:bg-gray-100"
+                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                    aria-label="Back to contacts"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="15 18 9 12 15 6" />
@@ -1195,7 +1226,7 @@ const Chat = ({ user, setUser }) => {
                   </button>
                 )}
                 <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                  <div className="mobile-avatar w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
                     {selectedContact.profilePhoto ? (
                       <img
                         src={selectedContact.profilePhoto}
@@ -1210,9 +1241,9 @@ const Chat = ({ user, setUser }) => {
                     <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></div>
                   )}
                 </div>
-                <div>
-                  <h3 className="font-medium" style={{ color: 'var(--text-primary)' }}>{selectedContact.name}</h3>
-                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <div className="min-w-0">
+                  <h3 className="font-medium truncate text-sm sm:text-base" style={{ color: 'var(--text-primary)' }}>{selectedContact.name}</h3>
+                  <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
                     {typingUsers[selectedContact._id] ? (
                       <span className="flex items-center">
                         <span className="mr-1">typing</span>
@@ -1228,10 +1259,10 @@ const Chat = ({ user, setUser }) => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 sm:space-x-2">
                 <button
                   onClick={toggleSearch}
-                  className="p-2 rounded-full hover:bg-gray-100"
+                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                   title="Search messages"
                   style={{ color: 'var(--text-primary)' }}
                 >
@@ -1284,7 +1315,7 @@ const Chat = ({ user, setUser }) => {
               </div>
             )}
 
-            <div className="flex-1 p-4 overflow-y-auto" style={{ backgroundColor: 'var(--chat-bg)' }}>
+            <div className="flex-1 p-3 sm:p-4 overflow-y-auto custom-scrollbar" style={{ backgroundColor: 'var(--chat-bg)' }}>
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--text-secondary)' }}>
                   <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'var(--bg-hover)' }}>
@@ -1292,19 +1323,25 @@ const Chat = ({ user, setUser }) => {
                       <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
                     </svg>
                   </div>
-                  <p>No messages yet</p>
-                  <p className="text-sm">Send a message to start the conversation</p>
+                  <p className="text-center">No messages yet</p>
+                  <p className="text-sm text-center">Send a message to start the conversation</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {messages.map((message, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, background: { duration: 0 } }}
-                      className={`flex ${message.sender === user._id ? 'justify-end' : 'justify-start'}`}
-                    >
+                <div className="space-y-1 sm:space-y-3">
+                  {messages.map((message, index) => {
+                    // Group messages by sender and date
+                    const showSenderInfo = index === 0 ||
+                      messages[index - 1].sender !== message.sender ||
+                      new Date(message.createdAt).getTime() - new Date(messages[index - 1].createdAt).getTime() > 5 * 60 * 1000;
+
+                    return (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, background: { duration: 0 } }}
+                        className={`flex ${message.sender === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
+                      >
                       <div
                         className={`chat-bubble group ${message.sender === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
                         onContextMenu={(e) => handleMessageContextMenu(e, message)}
@@ -1454,7 +1491,7 @@ const Chat = ({ user, setUser }) => {
                 onCancel={() => setShowVoiceRecorder(false)}
               />
             ) : (
-              <form onSubmit={handleSendMessage} className="p-4 border-t flex items-center space-x-2" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
+              <form onSubmit={handleSendMessage} className="mobile-message-input p-2 sm:p-4 border-t flex items-center space-x-1 sm:space-x-2" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
                 <Input
                   type="text"
                   value={newMessage}
@@ -1488,12 +1525,12 @@ const Chat = ({ user, setUser }) => {
                     }
                   }}
                   placeholder="Type a message..."
-                  className="flex-1"
+                  className="flex-1 mobile-input text-sm sm:text-base"
                 />
                 <button
                   type="button"
                   onClick={() => setShowVoiceRecorder(true)}
-                  className="p-2 rounded-full hover:bg-gray-100"
+                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                   title="Record voice message"
                   style={{ color: 'var(--text-primary)' }}
                 >
@@ -1503,7 +1540,12 @@ const Chat = ({ user, setUser }) => {
                     <line x1="12" y1="19" x2="12" y2="22" />
                   </svg>
                 </button>
-                <Button type="submit" disabled={!newMessage.trim()}>
+                <Button
+                  type="submit"
+                  disabled={!newMessage.trim()}
+                  className="mobile-btn p-1.5 sm:p-2 rounded-full"
+                  size="sm"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13" />
                     <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -1514,12 +1556,13 @@ const Chat = ({ user, setUser }) => {
           </>
         ) : selectedGroup ? (
           <>
-            <div className="p-4 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
-              <div className="flex items-center space-x-3">
+            <div className="mobile-header p-3 sm:p-4 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 {mobileView && (
                   <button
                     onClick={() => setShowContacts(true)}
-                    className="p-2 rounded-full hover:bg-gray-100"
+                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                    aria-label="Back to contacts"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="15 18 9 12 15 6" />
@@ -1527,7 +1570,7 @@ const Chat = ({ user, setUser }) => {
                   </button>
                 )}
                 <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                  <div className="mobile-avatar w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                     {selectedGroup.groupPhoto ? (
                       <img
                         src={selectedGroup.groupPhoto}
@@ -1539,17 +1582,17 @@ const Chat = ({ user, setUser }) => {
                     )}
                   </div>
                 </div>
-                <div>
-                  <h3 className="font-medium" style={{ color: 'var(--text-primary)' }}>{selectedGroup.name}</h3>
-                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <div className="min-w-0">
+                  <h3 className="font-medium truncate text-sm sm:text-base" style={{ color: 'var(--text-primary)' }}>{selectedGroup.name}</h3>
+                  <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
                     {selectedGroup.members.length} members
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 sm:space-x-2">
                 <button
                   onClick={toggleSearch}
-                  className="p-2 rounded-full hover:bg-gray-100"
+                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                   title="Search messages"
                   style={{ color: 'var(--text-primary)' }}
                 >
@@ -1560,7 +1603,7 @@ const Chat = ({ user, setUser }) => {
                 </button>
                 <button
                   onClick={() => setShowGroupDetailsModal(true)}
-                  className="p-2 rounded-full hover:bg-gray-100"
+                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                   title="Group info"
                   style={{ color: 'var(--text-primary)' }}
                 >
@@ -1614,7 +1657,7 @@ const Chat = ({ user, setUser }) => {
               </div>
             )}
 
-            <div className="flex-1 p-4 overflow-y-auto" style={{ backgroundColor: 'var(--chat-bg)' }}>
+            <div className="flex-1 p-3 sm:p-4 overflow-y-auto custom-scrollbar" style={{ backgroundColor: 'var(--chat-bg)' }}>
               {groupMessages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--text-secondary)' }}>
                   <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'var(--bg-hover)' }}>
@@ -1625,19 +1668,25 @@ const Chat = ({ user, setUser }) => {
                       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                     </svg>
                   </div>
-                  <p>No messages yet</p>
-                  <p className="text-sm">Send a message to start the group conversation</p>
+                  <p className="text-center">No messages yet</p>
+                  <p className="text-sm text-center">Send a message to start the group conversation</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {groupMessages.map((message, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, background: { duration: 0 } }}
-                      className={`flex ${message.sender._id === user._id ? 'justify-end' : 'justify-start'}`}
-                    >
+                <div className="space-y-1 sm:space-y-3">
+                  {groupMessages.map((message, index) => {
+                    // Group messages by sender and date
+                    const showSenderInfo = index === 0 ||
+                      groupMessages[index - 1].sender._id !== message.sender._id ||
+                      new Date(message.createdAt).getTime() - new Date(groupMessages[index - 1].createdAt).getTime() > 5 * 60 * 1000;
+
+                    return (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, background: { duration: 0 } }}
+                        className={`flex ${message.sender._id === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
+                      >
                       {message.sender._id !== user._id && (
                         <div className="flex-shrink-0 mr-2 self-end mb-1">
                           <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
@@ -1794,18 +1843,18 @@ const Chat = ({ user, setUser }) => {
                 onCancel={() => setShowVoiceRecorder(false)}
               />
             ) : (
-              <form onSubmit={handleSendGroupMessage} className="p-4 border-t flex items-center space-x-2" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
+              <form onSubmit={handleSendGroupMessage} className="mobile-message-input p-2 sm:p-4 border-t flex items-center space-x-1 sm:space-x-2" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
                 <Input
                   type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type a message..."
-                  className="flex-1"
+                  className="flex-1 mobile-input text-sm sm:text-base"
                 />
                 <button
                   type="button"
                   onClick={() => setShowVoiceRecorder(true)}
-                  className="p-2 rounded-full hover:bg-gray-100"
+                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                   title="Record voice message"
                   style={{ color: 'var(--text-primary)' }}
                 >
@@ -1815,7 +1864,12 @@ const Chat = ({ user, setUser }) => {
                     <line x1="12" y1="19" x2="12" y2="22" />
                   </svg>
                 </button>
-                <Button type="submit" disabled={!newMessage.trim()}>
+                <Button
+                  type="submit"
+                  disabled={!newMessage.trim()}
+                  className="mobile-btn p-1.5 sm:p-2 rounded-full"
+                  size="sm"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13" />
                     <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -1829,7 +1883,8 @@ const Chat = ({ user, setUser }) => {
             {mobileView && (
               <button
                 onClick={() => setShowContacts(true)}
-                className="absolute top-4 left-4 p-2 rounded-full bg-white shadow-md"
+                className="absolute top-4 left-4 p-2 rounded-full bg-white shadow-md z-10"
+                aria-label="Open contacts"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="3" y1="12" x2="21" y2="12" />
@@ -1842,17 +1897,31 @@ const Chat = ({ user, setUser }) => {
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.5, background: { duration: 0 } }}
-              className="text-center"
+              className="text-center px-4"
             >
-              <div className="w-24 h-24 bg-primary bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-primary bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-12 sm:w-12 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Welcome to WhatsApp Web</h2>
-              <p className="max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
-                Select a contact or group from the sidebar to start messaging
+              <h2 className="text-xl sm:text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Welcome to WhatsApp Web</h2>
+              <p className="max-w-md mx-auto text-sm sm:text-base" style={{ color: 'var(--text-secondary)' }}>
+                {mobileView ? 'Tap the menu button to select a contact' : 'Select a contact or group from the sidebar to start messaging'}
               </p>
+              {mobileView && (
+                <button
+                  onClick={() => setShowContacts(true)}
+                  className="mt-6 bg-primary text-white px-4 py-2 rounded-md shadow-md flex items-center justify-center mx-auto"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                  View Contacts
+                </button>
+              )}
             </motion.div>
           </div>
         )}
