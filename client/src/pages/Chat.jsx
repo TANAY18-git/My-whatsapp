@@ -1745,125 +1745,125 @@ const Chat = ({ user, setUser }) => {
                             cursor: message.isDeleted ? 'default' : 'context-menu'
                           }}
                         >
-                        {message.sender._id !== user._id && !message.isDeleted && (
-                          <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-                            {message.sender.name}
-                          </p>
-                        )}
-
-                        {message.isForwarded && !message.isDeleted && (
-                          <p className="text-xs italic mb-1" style={{ color: 'var(--text-secondary)' }}>
-                            Forwarded
-                          </p>
-                        )}
-
-                        {message.isReply && message.replyTo && !message.isDeleted && (
-                          <div className="mb-1 p-1 rounded-md" style={{ backgroundColor: 'var(--bg-hover)' }}>
-                            <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                              Replying to {message.replyTo.sender._id === user._id ? 'yourself' : message.replyTo.sender.name}
+                          {message.sender._id !== user._id && !message.isDeleted && (
+                            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                              {message.sender.name}
                             </p>
-                            <div className="pl-2 border-l-2 border-primary">
-                              {message.replyTo.messageType === 'voice' ? (
-                                <div className="flex items-center space-x-1">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                    <line x1="12" y1="19" x2="12" y2="22" />
-                                  </svg>
-                                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Voice message</span>
+                          )}
+
+                          {message.isForwarded && !message.isDeleted && (
+                            <p className="text-xs italic mb-1" style={{ color: 'var(--text-secondary)' }}>
+                              Forwarded
+                            </p>
+                          )}
+
+                          {message.isReply && message.replyTo && !message.isDeleted && (
+                            <div className="mb-1 p-1 rounded-md" style={{ backgroundColor: 'var(--bg-hover)' }}>
+                              <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                                Replying to {message.replyTo.sender._id === user._id ? 'yourself' : message.replyTo.sender.name}
+                              </p>
+                              <div className="pl-2 border-l-2 border-primary">
+                                {message.replyTo.messageType === 'voice' ? (
+                                  <div className="flex items-center space-x-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                      <line x1="12" y1="19" x2="12" y2="22" />
+                                    </svg>
+                                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Voice message</span>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs truncate max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {message.replyTo.text}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {message.isDeleted ? (
+                            <p className="italic" style={{ color: 'var(--text-secondary)' }}>
+                              This message was deleted
+                            </p>
+                          ) : message.messageType === 'voice' ? (
+                            <div className="flex flex-col space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                  <line x1="12" y1="19" x2="12" y2="22" />
+                                </svg>
+                                <span style={{ color: 'var(--text-secondary)' }}>
+                                  Voice message ({Math.floor(message.duration / 60)}:{(message.duration % 60).toString().padStart(2, '0')})
+                                </span>
+                              </div>
+                              <audio src={message.voiceUrl} controls className="w-full" preload="none" />
+                            </div>
+                          ) : (
+                            <p ref={el => {
+                              // Store reference if this message is in search results
+                              if (searchResults.some(result => result._id === message._id)) {
+                                searchResultRefs.current[message._id] = el;
+
+                                // Add highlight if this is the current search result
+                                if (searchResults[currentSearchIndex]?._id === message._id) {
+                                  el?.classList.add('ring-2', 'ring-primary', 'ring-offset-1');
+                                } else {
+                                  el?.classList.remove('ring-2', 'ring-primary', 'ring-offset-1');
+                                }
+                              }
+                            }}>
+                              {highlightSearchText(message.text)}
+                            </p>
+                          )}
+
+                          {/* Reactions display */}
+                          {message.reactions && message.reactions.length > 0 && !message.isDeleted && (
+                            <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                              {/* Group reactions by emoji */}
+                              {Object.entries(
+                                message.reactions.reduce((acc, reaction) => {
+                                  acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+                                  return acc;
+                                }, {})
+                              ).map(([emoji, count]) => (
+                                <div
+                                  key={emoji}
+                                  className={`flex items-center rounded-full px-2 py-0.5 text-xs ${
+                                    message.reactions.some(r => r.user === user._id && r.emoji === emoji)
+                                      ? 'bg-primary text-white'
+                                      : 'bg-gray-100 dark:bg-gray-700'
+                                  }`}
+                                >
+                                  <span className="mr-1">{emoji}</span>
+                                  {count > 1 && <span>{count}</span>}
                                 </div>
-                              ) : (
-                                <p className="text-xs truncate max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
-                                  {message.replyTo.text}
-                                </p>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between mt-1 space-x-1">
+                            <div className="flex items-center">
+                              {!message.isDeleted && (
+                                <button
+                                  onClick={(e) => handleOpenReactionPicker(e, message)}
+                                  className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Add reaction"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                                    <line x1="9" y1="9" x2="9.01" y2="9" />
+                                    <line x1="15" y1="9" x2="15.01" y2="9" />
+                                  </svg>
+                                </button>
                               )}
                             </div>
+
+                            <p className="text-xs text-gray-500">
+                              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
                           </div>
-                        )}
-
-                        {message.isDeleted ? (
-                          <p className="italic" style={{ color: 'var(--text-secondary)' }}>
-                            This message was deleted
-                          </p>
-                        ) : message.messageType === 'voice' ? (
-                          <div className="flex flex-col space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                <line x1="12" y1="19" x2="12" y2="22" />
-                              </svg>
-                              <span style={{ color: 'var(--text-secondary)' }}>
-                                Voice message ({Math.floor(message.duration / 60)}:{(message.duration % 60).toString().padStart(2, '0')})
-                              </span>
-                            </div>
-                            <audio src={message.voiceUrl} controls className="w-full" preload="none" />
-                          </div>
-                        ) : (
-                          <p ref={el => {
-                            // Store reference if this message is in search results
-                            if (searchResults.some(result => result._id === message._id)) {
-                              searchResultRefs.current[message._id] = el;
-
-                              // Add highlight if this is the current search result
-                              if (searchResults[currentSearchIndex]?._id === message._id) {
-                                el?.classList.add('ring-2', 'ring-primary', 'ring-offset-1');
-                              } else {
-                                el?.classList.remove('ring-2', 'ring-primary', 'ring-offset-1');
-                              }
-                            }
-                          }}>
-                            {highlightSearchText(message.text)}
-                          </p>
-                        )}
-
-                        {/* Reactions display */}
-                        {message.reactions && message.reactions.length > 0 && !message.isDeleted && (
-                          <div className="flex flex-wrap gap-1 mt-1 mb-1">
-                            {/* Group reactions by emoji */}
-                            {Object.entries(
-                              message.reactions.reduce((acc, reaction) => {
-                                acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
-                                return acc;
-                              }, {})
-                            ).map(([emoji, count]) => (
-                              <div
-                                key={emoji}
-                                className={`flex items-center rounded-full px-2 py-0.5 text-xs ${
-                                  message.reactions.some(r => r.user === user._id && r.emoji === emoji)
-                                    ? 'bg-primary text-white'
-                                    : 'bg-gray-100 dark:bg-gray-700'
-                                }`}
-                              >
-                                <span className="mr-1">{emoji}</span>
-                                {count > 1 && <span>{count}</span>}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between mt-1 space-x-1">
-                          <div className="flex items-center">
-                            {!message.isDeleted && (
-                              <button
-                                onClick={(e) => handleOpenReactionPicker(e, message)}
-                                className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                                title="Add reaction"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                                  <line x1="9" y1="9" x2="9.01" y2="9" />
-                                  <line x1="15" y1="9" x2="15.01" y2="9" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-
-                          <p className="text-xs text-gray-500">
-                            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
                       </div>
                     </motion.div>
                   ))}
