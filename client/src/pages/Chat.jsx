@@ -1377,14 +1377,14 @@ const Chat = ({ user, setUser }) => {
                         transition={{ duration: 0.3, background: { duration: 0 } }}
                         className={`flex ${message.sender === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
                       >
-                      <div
-                        className={`chat-bubble group ${message.sender === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
-                        onContextMenu={(e) => handleMessageContextMenu(e, message)}
-                        style={{
-                          opacity: message.isDeleted ? 0.7 : 1,
-                          cursor: message.isDeleted ? 'default' : 'context-menu'
-                        }}
-                      >
+                        <div
+                          className={`chat-bubble group ${message.sender === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
+                          onContextMenu={(e) => handleMessageContextMenu(e, message)}
+                          style={{
+                            opacity: message.isDeleted ? 0.7 : 1,
+                            cursor: message.isDeleted ? 'default' : 'context-menu'
+                          }}
+                        >
                         {message.isForwarded && !message.isDeleted && (
                           <p className="text-xs italic mb-1" style={{ color: 'var(--text-secondary)' }}>
                             Forwarded
@@ -1722,29 +1722,29 @@ const Chat = ({ user, setUser }) => {
                         transition={{ duration: 0.3, background: { duration: 0 } }}
                         className={`flex ${message.sender._id === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
                       >
-                      {message.sender._id !== user._id && (
-                        <div className="flex-shrink-0 mr-2 self-end mb-1">
-                          <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
-                            {message.sender.profilePhoto ? (
-                              <img
-                                src={message.sender.profilePhoto}
-                                alt={message.sender.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-sm font-semibold text-gray-700">{message.sender?.name ? message.sender.name.charAt(0) : '?'}</span>
-                            )}
+                        {message.sender._id !== user._id && (
+                          <div className="flex-shrink-0 mr-2 self-end mb-1">
+                            <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                              {message.sender.profilePhoto ? (
+                                <img
+                                  src={message.sender.profilePhoto}
+                                  alt={message.sender.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-sm font-semibold text-gray-700">{message.sender?.name ? message.sender.name.charAt(0) : '?'}</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      <div
-                        className={`chat-bubble group ${message.sender._id === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
-                        onContextMenu={(e) => handleGroupMessageContextMenu(e, message)}
-                        style={{
-                          opacity: message.isDeleted ? 0.7 : 1,
-                          cursor: message.isDeleted ? 'default' : 'context-menu'
-                        }}
-                      >
+                        )}
+                        <div
+                          className={`chat-bubble group ${message.sender._id === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
+                          onContextMenu={(e) => handleGroupMessageContextMenu(e, message)}
+                          style={{
+                            opacity: message.isDeleted ? 0.7 : 1,
+                            cursor: message.isDeleted ? 'default' : 'context-menu'
+                          }}
+                        >
                         {message.sender._id !== user._id && !message.isDeleted && (
                           <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                             {message.sender.name}
