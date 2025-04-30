@@ -1528,7 +1528,13 @@ const Chat = ({ user, setUser }) => {
                   <h2 className="text-lg sm:text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Chats</h2>
                   <div className="flex space-x-1 sm:space-x-2">
                     <button
-                      onClick={() => navigate('/profile')}
+                      onClick={() => {
+                        navigate('/profile');
+                        // Show tip for profile settings
+                        if (window.showTip) {
+                          window.showTip('profile-settings');
+                        }
+                      }}
                       className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                       title="Settings"
                     >
@@ -1538,7 +1544,13 @@ const Chat = ({ user, setUser }) => {
                       </svg>
                     </button>
                     <button
-                      onClick={() => setShowAddContactModal(true)}
+                      onClick={() => {
+                        setShowAddContactModal(true);
+                        // Show tip for adding contacts
+                        if (window.showTip) {
+                          window.showTip('add-contact');
+                        }
+                      }}
                       className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                       title="Add Contact"
                     >
@@ -1564,7 +1576,13 @@ const Chat = ({ user, setUser }) => {
                       )}
                     </button>
                     <button
-                      onClick={() => setShowCreateGroupModal(true)}
+                      onClick={() => {
+                        setShowCreateGroupModal(true);
+                        // Show tip for creating groups
+                        if (window.showTip) {
+                          window.showTip('create-group');
+                        }
+                      }}
                       className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                       title="Create Group"
                     >
@@ -2117,7 +2135,16 @@ const Chat = ({ user, setUser }) => {
                                   }}>
                                     {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     {message.sender === user._id && !message.pending && !message.failed && !message.offlinePending && (
-                                      <span className="ml-1">
+                                      <span
+                                        className="ml-1"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // Show tip for message status
+                                          if (window.showTip) {
+                                            window.showTip('message-status');
+                                          }
+                                        }}
+                                      >
                                         {message.read || readMessages.includes(message._id) ? (
                                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M18 6L7 17L2 12" />
