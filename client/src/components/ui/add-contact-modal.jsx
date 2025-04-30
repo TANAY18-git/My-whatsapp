@@ -27,7 +27,7 @@ const AddContactModal = ({ isOpen, onClose, user, onContactAdded }) => {
       const response = await axios.get(`${API_URL}/api/users/search?username=${username}`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
-      
+
       setSearchResults(response.data);
       if (response.data.length === 0) {
         setError('No users found with that username');
@@ -47,23 +47,29 @@ const AddContactModal = ({ isOpen, onClose, user, onContactAdded }) => {
 
     try {
       const response = await axios.post(
-        `${API_URL}/api/users/contacts`,
+        `${API_URL}/api/users/requests`,
         { contactId },
         {
           headers: { Authorization: `Bearer ${user.token}` }
         }
       );
 
-      setSuccess('Contact added successfully!');
+      // Check if the request was auto-accepted (both users sent requests to each other)
+      if (response.data.autoAccepted) {
+        setSuccess('Contact added successfully! They had already sent you a request.');
+        onContactAdded(response.data.contact);
+      } else {
+        setSuccess('Contact request sent successfully! Waiting for approval.');
+      }
+
       setLoading(false);
-      onContactAdded(response.data);
-      
+
       // Clear search results after adding
       setSearchResults([]);
       setUsername('');
     } catch (error) {
-      console.error('Error adding contact:', error);
-      setError(error.response?.data?.message || 'Failed to add contact');
+      console.error('Error sending contact request:', error);
+      setError(error.response?.data?.message || 'Failed to send contact request');
       setLoading(false);
     }
   };
@@ -105,7 +111,7 @@ const AddContactModal = ({ isOpen, onClose, user, onContactAdded }) => {
               placeholder="Enter username"
               className="w-full"
             />
-            <Button 
+            <Button
               onClick={handleSearch}
               disabled={loading}
               className="ml-2"

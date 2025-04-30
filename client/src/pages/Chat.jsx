@@ -18,6 +18,7 @@ import GroupDetailsModal from '../components/ui/group-details-modal';
 import ForwardMessageModal from '../components/ui/forward-message-modal';
 import ReplyMessageModal from '../components/ui/reply-message-modal';
 import AddContactModal from '../components/ui/add-contact-modal';
+import ContactRequestsModal from '../components/ui/contact-requests-modal';
 import { isStringTooLargeForLocalStorage } from '../lib/imageUtils';
 
 const Chat = ({ user, setUser }) => {
@@ -59,6 +60,8 @@ const Chat = ({ user, setUser }) => {
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showGroupDetailsModal, setShowGroupDetailsModal] = useState(false);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [showContactRequestsModal, setShowContactRequestsModal] = useState(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
   const searchResultRefs = useRef({});
@@ -198,6 +201,18 @@ const Chat = ({ user, setUser }) => {
     };
   }, [socket, user, selectedContact, messages]);
 
+  // Fetch pending requests count
+  const fetchPendingRequestsCount = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/users/requests`, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      setPendingRequestsCount(response.data.length);
+    } catch (error) {
+      console.error('Error fetching pending requests:', error);
+    }
+  };
+
   // Fetch contacts and groups
   useEffect(() => {
     const fetchData = async () => {
@@ -213,6 +228,9 @@ const Chat = ({ user, setUser }) => {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         setGroups(groupsResponse.data);
+
+        // Fetch pending requests count
+        await fetchPendingRequestsCount();
 
         setLoading(false);
       } catch (error) {
@@ -1036,6 +1054,23 @@ const Chat = ({ user, setUser }) => {
                       <line x1="20" y1="8" x2="20" y2="14" />
                       <line x1="23" y1="11" x2="17" y2="11" />
                     </svg>
+                  </button>
+                  <button
+                    onClick={() => setShowContactRequestsModal(true)}
+                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative"
+                    title="Contact Requests"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="8.5" cy="7" r="4" />
+                      <path d="M20 8v6" />
+                      <path d="M23 11h-6" />
+                    </svg>
+                    {pendingRequestsCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                        {pendingRequestsCount > 9 ? '9+' : pendingRequestsCount}
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={() => setShowCreateGroupModal(true)}
@@ -2047,6 +2082,24 @@ const Chat = ({ user, setUser }) => {
             setContacts(prev => [newContact, ...prev]);
           }
           setShowAddContactModal(false);
+        }}
+      />
+
+      {/* Contact Requests Modal */}
+      <ContactRequestsModal
+        isOpen={showContactRequestsModal}
+        onClose={() => {
+          setShowContactRequestsModal(false);
+          fetchPendingRequestsCount(); // Refresh the count after closing
+        }}
+        user={user}
+        onRequestAccepted={(newContact) => {
+          // Add the new contact to the contacts list
+          if (!contacts.some(contact => contact._id === newContact._id)) {
+            setContacts(prev => [newContact, ...prev]);
+          }
+          // Update the pending requests count
+          setPendingRequestsCount(prev => Math.max(0, prev - 1));
         }}
       />
 
