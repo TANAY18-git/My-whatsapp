@@ -11,6 +11,9 @@ import ProfilePage from './pages/ProfilePage';
 // Notification System
 import { initNotifications } from './lib/notificationSystem';
 
+// Tour Components
+import AppWrapper from './components/AppWrapper';
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -91,14 +94,16 @@ function App() {
 
   return (
     <Router>
-      <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" /> : <Login setUser={setUser} />} />
-        <Route path="/register" element={user ? <Navigate to="/" /> : <Register setUser={setUser} />} />
-        <Route path="/profile" element={user ? <ProfilePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
-        <Route path="/" element={user ? <Chat user={user} setUser={setUser} /> : <Navigate to="/login" />} />
-        {/* Catch all other routes and redirect to home */}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <AppWrapper>
+        <Routes>
+          <Route path="/login" element={user ? <Navigate to="/" /> : <Login setUser={setUser} />} />
+          <Route path="/register" element={user ? <Navigate to="/" /> : <Register setUser={setUser} />} />
+          <Route path="/profile" element={user ? <ProfilePage user={user} setUser={setUser} /> : <Navigate to="/login" />} />
+          <Route path="/" element={user ? <Chat user={user} setUser={setUser} /> : <Navigate to="/login" />} />
+          {/* Catch all other routes and redirect to home */}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </AppWrapper>
     </Router>
   );
 }

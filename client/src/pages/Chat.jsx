@@ -107,6 +107,11 @@ const Chat = ({ user, setUser }) => {
     const handleOffline = () => {
       console.log('App is offline');
       setIsAppOnline(false);
+
+      // Show offline mode tip
+      if (window.showTip) {
+        window.showTip('offline-mode');
+      }
     };
 
     window.addEventListener('online', handleOnline);
@@ -773,6 +778,11 @@ const Chat = ({ user, setUser }) => {
     setSelectedMessage(message);
     setMenuPosition({ x: e.clientX, y: e.clientY });
     setMenuOpen(true);
+
+    // Show tip for message options
+    if (window.showTip) {
+      window.showTip('message-options');
+    }
   };
 
   // Handle right-click on chat header to open chat menu (desktop only)
@@ -1096,9 +1106,14 @@ const Chat = ({ user, setUser }) => {
 
   // Toggle search bar
   const toggleSearch = () => {
-    setShowSearch(!showSearch);
+    const newShowSearch = !showSearch;
+    setShowSearch(newShowSearch);
+
     if (showSearch) {
       handleClearSearch();
+    } else if (newShowSearch && window.showTip) {
+      // Show tip for search when opening search bar
+      window.showTip('search-contacts');
     }
   };
 
@@ -2164,6 +2179,11 @@ const Chat = ({ user, setUser }) => {
                     onChange={(e) => {
                       setNewMessage(e.target.value);
 
+                      // Show tip for first-time message typing
+                      if (window.showTip && e.target.value.length === 1) {
+                        window.showTip('send-message');
+                      }
+
                       // Handle typing indicator
                       if (socket && selectedContact) {
                         // Clear any existing timeout
@@ -2202,7 +2222,13 @@ const Chat = ({ user, setUser }) => {
                   {/* Voice message button */}
                   <button
                     type="button"
-                    onClick={() => setShowVoiceRecorder(true)}
+                    onClick={() => {
+                      setShowVoiceRecorder(true);
+                      // Show tip for voice messages
+                      if (window.showTip) {
+                        window.showTip('voice-message');
+                      }
+                    }}
                     className="ml-2 text-gray-500 hover:text-gray-700 transition-colors"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
