@@ -7,6 +7,9 @@ import { createNotificationSound } from './notificationSound';
 // Create the notification sound from base64
 const DEFAULT_NOTIFICATION_SOUND = createNotificationSound();
 
+// Service worker registration
+let swRegistration = null;
+
 // Get notification settings - always enabled
 const getNotificationSettings = () => {
   // Always return enabled settings regardless of what's in localStorage
@@ -56,7 +59,12 @@ export const showNotification = (title, message) => {
 
   // Check if permission is already granted
   if (Notification.permission === "granted") {
-    createNotification(title, notificationMessage);
+    // If we have a service worker registration and the page is not visible, use it
+    if (swRegistration && document.visibilityState !== 'visible') {
+      createServiceWorkerNotification(title, notificationMessage);
+    } else {
+      createNotification(title, notificationMessage);
+    }
     return true;
   }
   // Check if permission is not denied
@@ -65,7 +73,11 @@ export const showNotification = (title, message) => {
       // Request permission and show notification if granted
       Notification.requestPermission().then(permission => {
         if (permission === "granted") {
-          createNotification(title, notificationMessage);
+          if (swRegistration && document.visibilityState !== 'visible') {
+            createServiceWorkerNotification(title, notificationMessage);
+          } else {
+            createNotification(title, notificationMessage);
+          }
           return true;
         }
       });
@@ -80,23 +92,108 @@ export const showNotification = (title, message) => {
   return false;
 };
 
+// Create and display the notification using the service worker
+const createServiceWorkerNotification = (title, message) => {
+  try {
+    if (!swRegistration) {
+      console.warn('Service worker not registered, falling back to regular notification');
+      return createNotification(title, message);
+    }
+
+    // Detect if we're on a mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+
+    // Create notification options with enhanced settings for mobile
+    const options = {
+      body: message,
+      icon: '/logo.png',
+      badge: '/logo.png',
+      tag: 'message-' + Date.now(), // Unique tag to ensure multiple notifications
+      data: {
+        url: window.location.href,
+        timestamp: Date.now()
+      },
+      silent: true, // Don't use browser's default sound (we'll play our own)
+      vibrate: isMobile ? [200, 100, 200] : undefined, // Vibration pattern for mobile
+      renotify: true, // Always notify, even if there's already a notification with the same tag
+      requireInteraction: true, // Notification remains until user interacts with it
+      actions: [
+        {
+          action: 'reply',
+          title: 'Reply',
+          icon: '/reply-icon.png'
+        },
+        {
+          action: 'close',
+          title: 'Close',
+          icon: '/close-icon.png'
+        }
+      ]
+    };
+
+    // Add Android-specific options
+    if (isAndroid) {
+      options.android = {
+        channelId: 'messages', // Must match the channel created in the service worker
+        priority: 'high', // High priority for Android
+        visibility: 'public' // Show on lock screen
+      };
+    }
+
+    // Show notification through service worker
+    swRegistration.showNotification(title, options)
+      .then(() => {
+        console.log('Service worker notification shown');
+        // Tell service worker to play sound
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'PLAY_NOTIFICATION_SOUND'
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error showing service worker notification:', error);
+        // Fall back to regular notification
+        createNotification(title, message);
+      });
+
+    return true;
+  } catch (error) {
+    console.error('Error creating service worker notification:', error);
+    // Fall back to regular notification
+    return createNotification(title, message);
+  }
+};
+
 // Create and display the notification
 const createNotification = (title, message) => {
   try {
-    // Create the notification
+    // Detect if we're on a mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    // Create the notification with enhanced options for mobile
     const notification = new Notification(title, {
       body: message,
       icon: '/logo.png',
-      silent: true // Don't use browser's default sound
+      badge: '/logo.png',
+      tag: 'message-' + Date.now(), // Unique tag
+      silent: true, // Don't use browser's default sound
+      vibrate: isMobile ? [200, 100, 200] : undefined, // Vibration pattern for mobile
+      requireInteraction: true, // Notification remains until user interacts with it
+      data: {
+        url: window.location.href,
+        timestamp: Date.now()
+      }
     });
 
     // Note: We don't call playNotificationSound() here because it's already called
     // in the Chat component when a message is received
 
-    // Close notification after 5 seconds
+    // Close notification after 10 seconds (longer for better visibility)
     setTimeout(() => {
       notification.close();
-    }, 5000);
+    }, 10000);
 
     // Handle notification click
     notification.onclick = () => {
@@ -112,7 +209,7 @@ const createNotification = (title, message) => {
 };
 
 // Initialize notification system
-export const initNotifications = () => {
+export const initNotifications = async () => {
   // Request notification permission on init
   if (Notification.permission !== "denied" && Notification.permission !== "granted") {
     try {
@@ -122,7 +219,52 @@ export const initNotifications = () => {
     }
   }
 
-  // No need to preload audio since we're using Web Audio API
+  // Register service worker for background notifications
+  if ('serviceWorker' in navigator) {
+    try {
+      swRegistration = await navigator.serviceWorker.register('/service-worker.js');
+      console.log('Service Worker registered with scope:', swRegistration.scope);
+
+      // Create notification channels for Android
+      if (swRegistration.pushManager) {
+        // Check if we're on Android and can create notification channels
+        if ('Notification' in window && 'serviceWorker' in navigator && navigator.userAgent.indexOf('Android') !== -1) {
+          try {
+            // This is a workaround since we can't directly create notification channels from the web
+            // We'll use the service worker to handle the notification display with proper channel settings
+            console.log('Setting up for Android notifications');
+
+            // We'll use a custom event to tell the service worker about our notification preferences
+            swRegistration.active.postMessage({
+              type: 'SETUP_NOTIFICATION_CHANNEL',
+              channel: {
+                id: 'messages',
+                name: 'Messages',
+                description: 'Notifications for new messages',
+                importance: 'high'
+              }
+            });
+          } catch (error) {
+            console.error('Error setting up Android notification channels:', error);
+          }
+        }
+      }
+
+      // Listen for messages from the service worker
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        console.log('Message from service worker:', event.data);
+
+        if (event.data && event.data.type === 'PLAY_NOTIFICATION_SOUND') {
+          playNotificationSound();
+        }
+      });
+    } catch (error) {
+      console.error('Service Worker registration failed:', error);
+    }
+  } else {
+    console.warn('Service workers are not supported in this browser');
+  }
+
   console.log('Notification system initialized');
 };
 

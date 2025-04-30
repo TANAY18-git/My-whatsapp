@@ -46,7 +46,27 @@ function App() {
         console.warn('Could not set up notification permission request:', error);
       }
     }
+
+    // Set up visibility change listener to handle background/foreground transitions
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Clean up event listener
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
+
+  // Handle visibility change (app going to background or coming to foreground)
+  const handleVisibilityChange = () => {
+    console.log('Visibility state changed:', document.visibilityState);
+
+    // If the app is coming back to the foreground, check for any missed notifications
+    if (document.visibilityState === 'visible') {
+      console.log('App is now visible');
+    } else {
+      console.log('App is now hidden');
+    }
+  };
 
   if (loading) {
     return (
