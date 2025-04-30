@@ -1680,7 +1680,7 @@ const Chat = ({ user, setUser }) => {
                                     key={emoji}
                                     className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
                                       ? 'bg-primary text-white'
-                                      : 'bg-gray-100 dark:bg-gray-700'
+                                      : 'bg-gray-100'
                                       }`}
                                   >
                                     <span className="mr-1">{emoji}</span>
@@ -1695,10 +1695,10 @@ const Chat = ({ user, setUser }) => {
                                 {!message.isDeleted && (
                                   <button
                                     onClick={(e) => handleOpenReactionPicker(e, message)}
-                                    className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className={`p-1.5 rounded-full hover:bg-gray-100 ${mobileView ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
                                     title="Add reaction"
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                       <circle cx="12" cy="12" r="10" />
                                       <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                                       <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -1724,11 +1724,11 @@ const Chat = ({ user, setUser }) => {
                                   </span>
                                 )}
                                 {message.messageType !== 'voice' && (
-                                  <div className="text-xs" style={{
-                                    color: message.sender === user._id ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.5)',
+                                  <div className="text-xs font-medium" style={{
+                                    color: message.sender === user._id ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.6)',
                                     textAlign: 'right',
                                     marginTop: '2px',
-                                    fontSize: '0.7rem'
+                                    fontSize: mobileView ? '0.75rem' : '0.7rem'
                                   }}>
                                     {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     {message.sender === user._id && (
@@ -2108,7 +2108,7 @@ const Chat = ({ user, setUser }) => {
                                     key={emoji}
                                     className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
                                       ? 'bg-primary text-white'
-                                      : 'bg-gray-100 dark:bg-gray-700'
+                                      : 'bg-gray-100'
                                       }`}
                                   >
                                     <span className="mr-1">{emoji}</span>
@@ -2123,10 +2123,10 @@ const Chat = ({ user, setUser }) => {
                                 {!message.isDeleted && (
                                   <button
                                     onClick={(e) => handleOpenReactionPicker(e, message)}
-                                    className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className={`p-1.5 rounded-full hover:bg-gray-100 ${mobileView ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
                                     title="Add reaction"
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                       <circle cx="12" cy="12" r="10" />
                                       <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                                       <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -2137,11 +2137,11 @@ const Chat = ({ user, setUser }) => {
                               </div>
 
                               {message.messageType !== 'voice' && (
-                                <div className="text-xs" style={{
-                                  color: message.sender._id === user._id ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.5)',
+                                <div className="text-xs font-medium" style={{
+                                  color: message.sender._id === user._id ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.6)',
                                   textAlign: 'right',
                                   marginTop: '2px',
-                                  fontSize: '0.7rem'
+                                  fontSize: mobileView ? '0.75rem' : '0.7rem'
                                 }}>
                                   {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>

@@ -143,7 +143,20 @@ body {
     margin-bottom: 0.375rem;
   }
 
-  /* Removed chat bubble arrows */
+  /* Improve reaction display on mobile */
+  .chat-bubble .flex-wrap {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  /* Make reaction buttons more tappable on mobile */
+  .chat-bubble button {
+    min-height: 2rem;
+    min-width: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
   body {
     font-size: var(--font-size-base);
@@ -365,6 +378,33 @@ body {
   .chat-bubble {
     max-width: 85%;
     padding: 0.75rem 1rem;
+  }
+
+  /* Improved chat container for mobile */
+  .chat-container {
+    padding: 0.5rem !important;
+  }
+
+  /* Improved message reactions for mobile */
+  .chat-bubble .flex-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+  }
+
+  /* Make reaction emoji more visible */
+  .chat-bubble .flex-wrap span {
+    font-size: 1rem;
+  }
+
+  /* Fix reaction picker positioning */
+  .reaction-picker-mobile {
+    position: fixed !important;
+    bottom: 70px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 100 !important;
   }
 
   /* Improved scrolling */
