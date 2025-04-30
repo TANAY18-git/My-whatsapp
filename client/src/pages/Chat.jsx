@@ -7,8 +7,8 @@ import { API_URL, SOCKET_URL } from '../config';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { FileUpload } from '../components/ui/file-upload';
-import { ThemeToggle } from '../components/ui/theme-toggle';
 import MessageMenu from '../components/ui/message-menu';
+import ChatContextMenu from '../components/ui/chat-context-menu';
 import ConfirmDialog from '../components/ui/confirm-dialog';
 import SearchBar from '../components/ui/search-bar';
 import VoiceRecorder from '../components/ui/voice-recorder';
@@ -19,7 +19,9 @@ import ForwardMessageModal from '../components/ui/forward-message-modal';
 import ReplyMessageModal from '../components/ui/reply-message-modal';
 import AddContactModal from '../components/ui/add-contact-modal';
 import ContactRequestsModal from '../components/ui/contact-requests-modal';
-import { isStringTooLargeForLocalStorage } from '../lib/imageUtils';
+import AudioWaveform from '../components/ui/audio-waveform';
+// isStringTooLargeForLocalStorage import removed (used in ProfilePage instead)
+import { playNotificationSound, showNotification } from '../lib/notificationSystem';
 
 const Chat = ({ user, setUser }) => {
   const [contacts, setContacts] = useState([]);
@@ -30,15 +32,16 @@ const Chat = ({ user, setUser }) => {
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [mobileView, setMobileView] = useState(window.innerWidth < 768);
+  // Always show contacts by default - this ensures the contacts view is visible on initial load
   const [showContacts, setShowContacts] = useState(true);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [newProfilePhoto, setNewProfilePhoto] = useState('');
   const [readMessages, setReadMessages] = useState([]);
   const [typingUsers, setTypingUsers] = useState({});
   const [isTyping, setIsTyping] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [chatMenuOpen, setChatMenuOpen] = useState(false);
+  const [chatMenuPosition, setChatMenuPosition] = useState({ x: 0, y: 0 });
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [deleteType, setDeleteType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,24 +80,53 @@ const Chat = ({ user, setUser }) => {
     };
   }, []);
 
+  // Ensure contacts view is shown immediately when component mounts
+  useEffect(() => {
+    // This will run once when the component first loads
+    setShowContacts(true);
+  }, []);
+
   // Handle socket events
   useEffect(() => {
     if (!socket || !user) return;
 
-    socket.emit('addUser', user._id);
+    // Add user to online users when socket connects
+    const addUserToOnline = () => {
+      console.log('Socket connected, adding user to online users');
+      socket.emit('addUser', user._id);
+    };
 
+    // Add user immediately if socket is already connected
+    if (socket.connected) {
+      addUserToOnline();
+    } else {
+      // Add user when socket connects
+      socket.on('connect', addUserToOnline);
+    }
+
+    // Listen for online users updates
     socket.on('getUsers', (users) => {
+      console.log('Received online users:', users);
       setOnlineUsers(users);
     });
 
     socket.on('getMessage', (data) => {
+      // Find the contact who sent the message
+      const sender = contacts.find(contact => contact._id === data.senderId);
+
+      // Create a complete message object
+      const newMessage = {
+        sender: data.senderId,
+        text: data.text || '',
+        createdAt: data.createdAt || Date.now(),
+        _id: data.messageId,
+        messageType: data.messageType || 'text',
+        voiceUrl: data.voiceUrl || '',
+        duration: data.duration || 0
+      };
+
       if (selectedContact?._id === data.senderId) {
-        const newMessage = {
-          sender: data.senderId,
-          text: data.text,
-          createdAt: data.createdAt || Date.now(),
-          _id: data.messageId
-        };
+        // Add message to current conversation
         setMessages((prev) => [...prev, newMessage]);
 
         // Mark message as read if chat is open
@@ -102,8 +134,54 @@ const Chat = ({ user, setUser }) => {
           senderId: data.senderId,
           receiverId: user._id
         });
+
+        // If the window is not focused, still show notification
+        if (!document.hasFocus()) {
+          triggerNotification(sender, data);
+        }
+      } else {
+        // Update unread count for the contact
+        setContacts(prev =>
+          prev.map(contact =>
+            contact._id === data.senderId
+              ? { ...contact, unreadCount: (contact.unreadCount || 0) + 1 }
+              : contact
+          )
+        );
+
+        // Always show notification for messages from other contacts
+        triggerNotification(sender, data);
       }
     });
+
+    // Helper function to trigger notifications
+    const triggerNotification = (sender, data) => {
+      if (!sender) return;
+
+      try {
+        // Always play sound for new messages
+        const soundPlayed = playNotificationSound();
+        console.log('Notification sound played:', soundPlayed);
+
+        // Format message preview based on message type
+        let messagePreview = 'You received a new message';
+        if (data.messageType === 'text' && data.text) {
+          messagePreview = data.text;
+        } else if (data.messageType === 'voice') {
+          messagePreview = '🎤 Voice message';
+        }
+
+        // Show desktop notification
+        const notificationShown = showNotification(
+          sender.name || 'New Message',
+          messagePreview
+        );
+
+        console.log('Notification shown for message from:', sender.name, notificationShown);
+      } catch (error) {
+        console.error('Error showing notification:', error);
+      }
+    };
 
     socket.on('messagesRead', (data) => {
       if (data.readBy === selectedContact?._id) {
@@ -150,6 +228,9 @@ const Chat = ({ user, setUser }) => {
 
     // Listen for group messages
     socket.on('getGroupMessage', (data) => {
+      // Find the group
+      const group = groups.find(g => g._id === data.groupId);
+
       if (selectedGroup && selectedGroup._id === data.groupId) {
         setGroupMessages(prev => [...prev, data.message]);
 
@@ -158,8 +239,56 @@ const Chat = ({ user, setUser }) => {
           groupId: data.groupId,
           messageId: data.message._id
         });
+
+        // If the window is not focused, still show notification
+        if (!document.hasFocus()) {
+          triggerGroupNotification(group, data);
+        }
+      } else if (group) {
+        // Update unread count for the group
+        setGroups(prev =>
+          prev.map(g =>
+            g._id === data.groupId
+              ? { ...g, unreadCount: (g.unreadCount || 0) + 1 }
+              : g
+          )
+        );
+
+        // Always show notification for messages from other groups
+        triggerGroupNotification(group, data);
       }
     });
+
+    // Helper function to trigger group notifications
+    const triggerGroupNotification = (group, data) => {
+      if (!group) return;
+
+      try {
+        // Always play sound for new messages
+        const soundPlayed = playNotificationSound();
+        console.log('Group notification sound played:', soundPlayed);
+
+        // Format message preview based on message type
+        const senderName = data.message.sender?.name || 'Someone';
+        let messagePreview = 'New message';
+
+        if (data.message.messageType === 'text' && data.message.text) {
+          messagePreview = `${senderName}: ${data.message.text}`;
+        } else if (data.message.messageType === 'voice') {
+          messagePreview = `${senderName}: 🎤 Voice message`;
+        }
+
+        // Show desktop notification
+        const notificationShown = showNotification(
+          `${group.name} (Group)`,
+          messagePreview
+        );
+
+        console.log('Notification shown for group message in:', group.name, notificationShown);
+      } catch (error) {
+        console.error('Error showing group notification:', error);
+      }
+    };
 
     // Listen for group message reactions
     socket.on('groupMessageReaction', (data) => {
@@ -187,6 +316,10 @@ const Chat = ({ user, setUser }) => {
     });
 
     return () => {
+      // Remove the connect listener
+      socket.off('connect', addUserToOnline);
+
+      // Remove other listeners
       socket.off('getUsers');
       socket.off('getMessage');
       socket.off('getGroupMessage');
@@ -199,7 +332,7 @@ const Chat = ({ user, setUser }) => {
       socket.off('groupMessageDeleted');
       socket.off('markGroupMessageRead');
     };
-  }, [socket, user, selectedContact, messages]);
+  }, [socket, user, contacts]);
 
   // Fetch pending requests count
   const fetchPendingRequestsCount = async () => {
@@ -283,16 +416,28 @@ const Chat = ({ user, setUser }) => {
             .filter(msg => msg.sender === selectedContact._id)
             .map(msg => msg._id)
         ]);
+
+        // Reset unread count for this contact
+        setContacts(prev =>
+          prev.map(contact =>
+            contact._id === selectedContact._id
+              ? { ...contact, unreadCount: 0 }
+              : contact
+          )
+        );
       } catch (error) {
         console.error('Error fetching messages:', error);
       }
     };
 
     fetchMessages();
-    if (mobileView) {
+
+    // On mobile, hide contacts view when a chat is selected
+    // This ensures proper navigation flow on mobile devices
+    if (mobileView && selectedContact) {
       setShowContacts(false);
     }
-  }, [selectedContact, user, socket]);
+  }, [selectedContact, user, socket, mobileView]);
 
   // Fetch group messages when a group is selected
   useEffect(() => {
@@ -314,17 +459,31 @@ const Chat = ({ user, setUser }) => {
         await axios.put(`${API_URL}/api/groups/${selectedGroup._id}/messages/read`, {}, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
+
+        // Reset unread count for this group
+        setGroups(prev =>
+          prev.map(group =>
+            group._id === selectedGroup._id
+              ? { ...group, unreadCount: 0 }
+              : group
+          )
+        );
       } catch (error) {
         console.error('Error fetching group messages:', error);
       }
     };
 
     fetchGroupMessages();
-  }, [selectedGroup, user, socket]);
 
-  // Scroll to bottom of messages
+    // On mobile, hide contacts view when a group chat is selected
+    if (mobileView && selectedGroup) {
+      setShowContacts(false);
+    }
+  }, [selectedGroup, user, socket, mobileView, selectedContact]);
+
+  // Scroll to bottom of messages without animation
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages, groupMessages]);
 
   // Handle window resize
@@ -340,6 +499,37 @@ const Chat = ({ user, setUser }) => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Always show contacts view by default when component loads
+  useEffect(() => {
+    // Force showing contacts view on initial load
+    setShowContacts(true);
+
+    // Also show contacts when no chat is selected
+    if (!selectedContact && !selectedGroup) {
+      setShowContacts(true);
+    }
+  }, [selectedContact, selectedGroup]);
+
+  // Ensure contacts are shown on mobile when component first loads
+  useEffect(() => {
+    if (mobileView) {
+      setShowContacts(true);
+    }
+  }, [mobileView]);
+
+  // Handle back button functionality for mobile
+  const handleBackNavigation = () => {
+    if (selectedContact || selectedGroup) {
+      // If in a chat, go back to contacts
+      setSelectedContact(null);
+      setSelectedGroup(null);
+      setShowContacts(true);
+    } else {
+      // If in contacts view, do nothing (stay on contacts)
+      // We've removed the X button that would hide contacts
+    }
+  };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -374,10 +564,8 @@ const Chat = ({ user, setUser }) => {
       setMessages([...messages, response.data]);
       setNewMessage('');
 
-      // Scroll to bottom
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      // Scroll to bottom without animation
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
 
       // Stop typing indicator when message is sent
       if (isTyping) {
@@ -433,10 +621,8 @@ const Chat = ({ user, setUser }) => {
       // Add message to UI
       setMessages(prev => [...prev, response.data]);
 
-      // Scroll to bottom
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      // Scroll to bottom without animation
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
 
       // Emit socket event
       socket.emit('sendMessage', {
@@ -460,47 +646,13 @@ const Chat = ({ user, setUser }) => {
   };
 
   const isOnline = (userId) => {
+    if (!userId || !onlineUsers || !Array.isArray(onlineUsers)) {
+      return false;
+    }
     return onlineUsers.some((user) => user.userId === userId);
   };
 
-  const updateProfilePhoto = () => {
-    if (!newProfilePhoto) return;
-
-    try {
-      // Update user object with new profile photo
-      const updatedUser = { ...user, profilePhoto: newProfilePhoto };
-      const userDataString = JSON.stringify(updatedUser);
-
-      // Check if the data is too large for localStorage
-      if (isStringTooLargeForLocalStorage(userDataString)) {
-        console.warn('Profile photo is too large for localStorage');
-        alert('Your profile photo is quite large. It will be saved for this session only and may not persist after you close the app.');
-
-        // Update state only (session storage)
-        setUser(updatedUser);
-      } else {
-        // Try to update localStorage
-        try {
-          localStorage.setItem('whatsapp_user', userDataString);
-          // Update state
-          setUser(updatedUser);
-        } catch (storageError) {
-          console.error('localStorage error:', storageError);
-          // If localStorage fails, we can still update the state
-          // This will keep the profile photo for the current session
-          alert('Your profile photo was saved for this session only. It may not persist after you close the app.');
-          setUser(updatedUser);
-        }
-      }
-
-      // Close modal
-      setShowProfileModal(false);
-      setNewProfilePhoto('');
-    } catch (error) {
-      console.error('Error updating profile photo:', error);
-      alert('Failed to update profile photo. Please try again with a smaller image.');
-    }
-  };
+  // Profile photo update functionality moved to ProfilePage component
 
   // Handle right-click on message to open menu
   const handleMessageContextMenu = (e, message) => {
@@ -508,6 +660,19 @@ const Chat = ({ user, setUser }) => {
     setSelectedMessage(message);
     setMenuPosition({ x: e.clientX, y: e.clientY });
     setMenuOpen(true);
+  };
+
+  // Handle right-click on chat header to open chat menu (desktop only)
+  const handleChatContextMenu = (e) => {
+    if (mobileView) return; // Only for desktop
+    e.preventDefault();
+    setChatMenuPosition({ x: e.clientX, y: e.clientY });
+    setChatMenuOpen(true);
+  };
+
+  // Close chat menu
+  const handleCloseChatMenu = () => {
+    setChatMenuOpen(false);
   };
 
   // Close message menu
@@ -577,10 +742,8 @@ const Chat = ({ user, setUser }) => {
 
       setMessages([...messages, response.data]);
 
-      // Scroll to bottom
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      // Scroll to bottom without animation
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
 
       return response.data;
     } catch (error) {
@@ -613,10 +776,8 @@ const Chat = ({ user, setUser }) => {
 
       setGroupMessages([...groupMessages, response.data]);
 
-      // Scroll to bottom
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      // Scroll to bottom without animation
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
 
       return response.data;
     } catch (error) {
@@ -645,12 +806,10 @@ const Chat = ({ user, setUser }) => {
 
     // Scroll to first result if there are any
     if (results.length > 0) {
-      setTimeout(() => {
-        const firstResultRef = searchResultRefs.current[results[0]._id];
-        if (firstResultRef) {
-          firstResultRef.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
+      const firstResultRef = searchResultRefs.current[results[0]._id];
+      if (firstResultRef) {
+        firstResultRef.scrollIntoView({ behavior: 'auto', block: 'center' });
+      }
     }
   };
 
@@ -663,7 +822,7 @@ const Chat = ({ user, setUser }) => {
 
     const nextResultRef = searchResultRefs.current[searchResults[nextIndex]._id];
     if (nextResultRef) {
-      nextResultRef.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      nextResultRef.scrollIntoView({ behavior: 'auto', block: 'center' });
     }
   };
 
@@ -676,7 +835,7 @@ const Chat = ({ user, setUser }) => {
 
     const prevResultRef = searchResultRefs.current[searchResults[prevIndex]._id];
     if (prevResultRef) {
-      prevResultRef.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      prevResultRef.scrollIntoView({ behavior: 'auto', block: 'center' });
     }
   };
 
@@ -804,10 +963,8 @@ const Chat = ({ user, setUser }) => {
       setGroupMessages(prev => [...prev, response.data]);
       setNewMessage('');
 
-      // Scroll to bottom
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      // Scroll to bottom without animation
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
 
       // Emit socket event to notify group members
       socket.emit('sendGroupMessage', {
@@ -854,10 +1011,8 @@ const Chat = ({ user, setUser }) => {
       // Add message to UI
       setGroupMessages(prev => [...prev, response.data]);
 
-      // Scroll to bottom
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      // Scroll to bottom without animation
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
 
       // Emit socket event
       socket.emit('sendGroupMessage', {
@@ -983,8 +1138,10 @@ const Chat = ({ user, setUser }) => {
     }
   };
 
+  // Mobile bottom navigation is now handled directly with onClick handlers
+
   return (
-    <div className="flex h-screen" style={{ backgroundColor: 'var(--bg-main)' }}>
+    <div className="flex h-screen relative" style={{ backgroundColor: 'var(--bg-main)' }}>
       {/* Sidebar - Contacts */}
       <AnimatePresence>
         {(showContacts || !mobileView) && (
@@ -993,132 +1150,156 @@ const Chat = ({ user, setUser }) => {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -300, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className={`w-full md:w-1/3 lg:w-1/4 border-r flex flex-col ${mobileView ? 'absolute z-10 h-full' : ''}`}
+            className={`w-full md:w-1/3 lg:w-1/4 xl:w-1/5 border-r flex flex-col ${mobileView ? 'absolute z-10 h-full' : ''} tablet-sidebar-width`}
             style={{
               backgroundColor: 'var(--bg-panel)',
               borderColor: 'var(--border-color)',
               boxShadow: mobileView ? '0 4px 12px rgba(0, 0, 0, 0.15)' : 'none'
             }}
           >
-            <div className="mobile-header p-4 border-b border-gray-200 bg-primary text-white flex justify-between items-center">
-              <div className="flex items-center space-x-2">
-                <div
-                  className="mobile-avatar w-10 h-10 rounded-full bg-white/20 flex items-center justify-center overflow-hidden cursor-pointer"
-                  onClick={() => setShowProfileModal(true)}
-                  title="Update profile photo"
-                >
-                  {user?.profilePhoto ? (
-                    <img
-                      src={user.profilePhoto}
-                      alt={user.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-lg font-semibold">{user?.name?.charAt(0)}</span>
-                  )}
-                </div>
-                <div>
-                  <h2 className="font-semibold text-sm md:text-base">{user?.name}</h2>
-                  <p className="text-xs text-white/70 hidden sm:block">Online</p>
-                </div>
-              </div>
-              <div className="flex space-x-1 md:space-x-2">
-                {mobileView && (
-                  <button
-                    onClick={() => setShowContacts(false)}
-                    className="mobile-btn p-2 rounded-full hover:bg-white/20"
-                    aria-label="Close sidebar"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-                <ThemeToggle />
-                <button
-                  onClick={handleLogout}
-                  className="mobile-btn p-2 rounded-full hover:bg-white/20"
-                  aria-label="Logout"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
+            {/* Top bar removed for mobile view */}
 
             <div className="p-3 sm:p-4">
-              <div className="flex justify-between items-center mb-3 sm:mb-4">
-                <h2 className="text-lg sm:text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Chats</h2>
-                <div className="flex space-x-1 sm:space-x-2">
-                  <button
-                    onClick={() => setShowAddContactModal(true)}
-                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                    title="Add Contact"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                      <circle cx="8.5" cy="7" r="4" />
-                      <line x1="20" y1="8" x2="20" y2="14" />
-                      <line x1="23" y1="11" x2="17" y2="11" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setShowContactRequestsModal(true)}
-                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative"
-                    title="Contact Requests"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                      <circle cx="8.5" cy="7" r="4" />
-                      <path d="M20 8v6" />
-                      <path d="M23 11h-6" />
-                    </svg>
-                    {pendingRequestsCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                        {pendingRequestsCount > 9 ? '9+' : pendingRequestsCount}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setShowCreateGroupModal(true)}
-                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                    title="Create Group"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="16" />
-                      <line x1="8" y1="12" x2="16" y2="12" />
-                    </svg>
-                  </button>
-                  <ThemeToggle />
+              {/* Top bar removed for mobile view */}
+              {!mobileView && (
+                <div className="flex justify-between items-center mb-3 sm:mb-4">
+                  <h2 className="text-lg sm:text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Chats</h2>
+                  <div className="flex space-x-1 sm:space-x-2">
+                    <button
+                      onClick={() => navigate('/profile')}
+                      className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="Settings"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setShowAddContactModal(true)}
+                      className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="Add Contact"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="8.5" cy="7" r="4" />
+                        <line x1="20" y1="8" x2="20" y2="14" />
+                        <line x1="23" y1="11" x2="17" y2="11" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setShowContactRequestsModal(true)}
+                      className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative"
+                      title="Contact Requests"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                      </svg>
+                      {pendingRequestsCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                          {pendingRequestsCount > 9 ? '9+' : pendingRequestsCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setShowCreateGroupModal(true)}
+                      className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="Create Group"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="16" />
+                        <line x1="8" y1="12" x2="16" y2="12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+              {mobileView && (
+                <div className="mb-3">
+                  <h2 className="text-lg sm:text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Chats</h2>
+                </div>
+              )}
               <div className="relative">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: '#0A85FF' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </div>
                 <Input
                   type="text"
                   placeholder="Search contacts and groups..."
-                  className="w-full pl-10 mobile-input"
+                  className="w-full pl-12 pr-4 py-3 mobile-touch-target rounded-full"
                   value={contactSearchQuery}
                   onChange={(e) => setContactSearchQuery(e.target.value)}
+                  style={{
+                    height: '48px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    backgroundColor: 'white',
+                    fontSize: '16px'
+                  }}
                 />
+                {contactSearchQuery && (
+                  <button
+                    onClick={() => setContactSearchQuery('')}
+                    className="absolute inset-y-0 right-0 flex items-center pr-4"
+                  >
+                    <div className="bg-gray-200 rounded-full p-1 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: '#666' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </div>
+                  </button>
+                )}
+
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
               {loading ? (
-                <div className="flex justify-center items-center h-full">
+                <div className="flex flex-col justify-center items-center h-full p-4">
                   <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                    className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full"
-                  />
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className="bg-white rounded-lg shadow-lg p-6 flex flex-col items-center"
+                  >
+                    <div className="relative mb-4">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                        className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full"
+                      />
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: [0, 1, 0] }}
+                        transition={{ repeat: Infinity, duration: 2, times: [0, 0.5, 1] }}
+                        className="absolute inset-0 flex items-center justify-center"
+                      >
+                        <div className="w-6 h-6 bg-primary rounded-full opacity-20"></div>
+                      </motion.div>
+                    </div>
+                    <p className="text-gray-600 font-medium">Loading your chats...</p>
+                    <div className="mt-2 flex space-x-1">
+                      <motion.div
+                        animate={{ y: [-3, 3, -3] }}
+                        transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                        className="w-2 h-2 bg-primary rounded-full"
+                      />
+                      <motion.div
+                        animate={{ y: [-3, 3, -3] }}
+                        transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut", delay: 0.2 }}
+                        className="w-2 h-2 bg-primary rounded-full"
+                      />
+                      <motion.div
+                        animate={{ y: [-3, 3, -3] }}
+                        transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut", delay: 0.4 }}
+                        className="w-2 h-2 bg-primary rounded-full"
+                      />
+                    </div>
+                  </motion.div>
                 </div>
               ) : contacts.length === 0 && groups.length === 0 ? (
                 <div className="text-center p-6 text-gray-500">
@@ -1151,14 +1332,15 @@ const Chat = ({ user, setUser }) => {
                               setSelectedContact(null);
                               if (mobileView) setShowContacts(false);
                             }}
-                            className={`mobile-contact-item p-3 sm:p-4 border-b cursor-pointer flex items-center space-x-3`}
+                            className={`mobile-contact-item p-3 sm:p-4 cursor-pointer flex items-center space-x-3 mobile-touch-target rounded-lg mb-1`}
                             style={{
                               borderColor: 'var(--border-color)',
-                              backgroundColor: selectedGroup?._id === group._id ? 'var(--bg-hover)' : 'transparent'
+                              backgroundColor: selectedGroup?._id === group._id ? 'var(--bg-hover)' : 'transparent',
+                              boxShadow: selectedGroup?._id === group._id ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
                             }}
                           >
                             <div className="relative">
-                              <div className="mobile-avatar w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                              <div className="mobile-avatar w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                                 {group.groupPhoto ? (
                                   <img
                                     src={group.groupPhoto}
@@ -1166,14 +1348,26 @@ const Chat = ({ user, setUser }) => {
                                     className="w-full h-full object-cover"
                                   />
                                 ) : (
-                                  <span className="text-lg font-semibold text-primary">{group?.name ? group.name.charAt(0) : '?'}</span>
+                                  <span className="text-xl font-semibold text-primary">{group?.name ? group.name.charAt(0) : '?'}</span>
                                 )}
                               </div>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{group.name}</h3>
-                              <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
-                                {group.members.length} members
+                              <div className="flex justify-between items-center">
+                                <h3 className="font-medium truncate text-base" style={{ color: 'var(--text-primary)' }}>{group.name}</h3>
+                                <div className="flex items-center space-x-1">
+                                  {group.unreadCount > 0 && (
+                                    <span className="flex items-center justify-center text-xs text-white bg-green-500 rounded-full w-5 h-5 font-medium">
+                                      {group.unreadCount > 9 ? '9+' : group.unreadCount}
+                                    </span>
+                                  )}
+                                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                    {group.members.length} members
+                                  </span>
+                                </div>
+                              </div>
+                              <p className="text-sm truncate mt-1" style={{ color: 'var(--text-secondary)' }}>
+                                Tap to open group chat
                               </p>
                             </div>
                           </motion.div>
@@ -1204,14 +1398,15 @@ const Chat = ({ user, setUser }) => {
                               setSelectedGroup(null);
                               if (mobileView) setShowContacts(false);
                             }}
-                            className={`mobile-contact-item p-3 sm:p-4 border-b cursor-pointer flex items-center space-x-3`}
+                            className={`mobile-contact-item p-3 sm:p-4 cursor-pointer flex items-center space-x-3 mobile-touch-target rounded-lg mb-1`}
                             style={{
                               borderColor: 'var(--border-color)',
-                              backgroundColor: selectedContact?._id === contact._id ? 'var(--bg-hover)' : 'transparent'
+                              backgroundColor: selectedContact?._id === contact._id ? 'var(--bg-hover)' : 'transparent',
+                              boxShadow: selectedContact?._id === contact._id ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
                             }}
                           >
                             <div className="relative">
-                              <div className="mobile-avatar w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                              <div className="mobile-avatar w-14 h-14 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
                                 {contact.profilePhoto ? (
                                   <img
                                     src={contact.profilePhoto}
@@ -1219,27 +1414,34 @@ const Chat = ({ user, setUser }) => {
                                     className="w-full h-full object-cover"
                                   />
                                 ) : (
-                                  <span className="text-lg font-semibold text-gray-700">{contact?.name ? contact.name.charAt(0) : '?'}</span>
+                                  <span className="text-xl font-semibold text-gray-700">{contact?.name ? contact.name.charAt(0) : '?'}</span>
                                 )}
                               </div>
                               {isOnline(contact._id) && (
-                                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                                <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-center">
-                                <h3 className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>{contact.name}</h3>
+                                <h3 className="font-medium truncate text-base" style={{ color: 'var(--text-primary)' }}>{contact.name}</h3>
                                 <span className="text-xs text-gray-500 ml-1 whitespace-nowrap">
                                   {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                 </span>
                               </div>
-                              <div className="flex justify-between items-center">
+                              <div className="flex justify-between items-center mt-1">
                                 <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
                                   {contact.username ? `@${contact.username}` : contact.email}
                                 </p>
-                                {isOnline(contact._id) && (
-                                  <span className="text-xs text-green-500 ml-1 whitespace-nowrap">online</span>
-                                )}
+                                <div className="flex items-center space-x-1">
+                                  {contact.unreadCount > 0 && (
+                                    <span className="flex items-center justify-center text-xs text-white bg-green-500 rounded-full w-5 h-5 font-medium">
+                                      {contact.unreadCount > 9 ? '9+' : contact.unreadCount}
+                                    </span>
+                                  )}
+                                  {isOnline(contact._id) && (
+                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full whitespace-nowrap">online</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </motion.div>
@@ -1254,24 +1456,26 @@ const Chat = ({ user, setUser }) => {
       </AnimatePresence>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col ${(selectedContact || selectedGroup) && mobileView ? 'absolute inset-0 z-20' : ''}`}>
         {selectedContact ? (
           <>
-            <div className="mobile-header p-3 sm:p-4 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                {mobileView && (
-                  <button
-                    onClick={() => setShowContacts(true)}
-                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                    aria-label="Back to contacts"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="15 18 9 12 15 6" />
-                    </svg>
-                  </button>
-                )}
+            <div
+              className="mobile-header p-2 border-b flex items-center justify-between"
+              style={{ backgroundColor: '#F2F2F7', borderColor: 'var(--border-color)' }}
+              onContextMenu={handleChatContextMenu}
+            >
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleBackNavigation}
+                  className="p-1 rounded-full hover:bg-gray-100/10"
+                  aria-label="Back to contacts"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
                 <div className="relative">
-                  <div className="mobile-avatar w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                  <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
                     {selectedContact.profilePhoto ? (
                       <img
                         src={selectedContact.profilePhoto}
@@ -1279,16 +1483,16 @@ const Chat = ({ user, setUser }) => {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <span className="text-lg font-semibold text-gray-700">{selectedContact?.name ? selectedContact.name.charAt(0) : '?'}</span>
+                      <span className="text-base font-semibold text-gray-700">{selectedContact?.name ? selectedContact.name.charAt(0) : 'T'}</span>
                     )}
                   </div>
                   {isOnline(selectedContact._id) && (
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></div>
+                    <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-medium truncate text-sm sm:text-base" style={{ color: 'var(--text-primary)' }}>{selectedContact.name}</h3>
-                  <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
+                  <h3 className="font-medium truncate text-sm text-gray-800">{selectedContact.name}</h3>
+                  <p className="text-xs truncate text-gray-500">
                     {typingUsers[selectedContact._id] ? (
                       <span className="flex items-center">
                         <span className="mr-1">typing</span>
@@ -1304,18 +1508,29 @@ const Chat = ({ user, setUser }) => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-1 sm:space-x-2">
+              <div className="flex items-center">
                 <button
                   onClick={toggleSearch}
-                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="p-1.5 rounded-full hover:bg-gray-100/10"
                   title="Search messages"
-                  style={{ color: 'var(--text-primary)' }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8" />
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
                 </button>
+                {!mobileView && (
+                  <button
+                    onClick={handleBackNavigation}
+                    className="p-1.5 rounded-full hover:bg-gray-100/10 ml-1"
+                    title="Close chat"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1360,176 +1575,199 @@ const Chat = ({ user, setUser }) => {
               </div>
             )}
 
-            <div className="flex-1 p-3 sm:p-4 overflow-y-auto custom-scrollbar" style={{ backgroundColor: 'var(--chat-bg)' }}>
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--text-secondary)' }}>
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'var(--bg-hover)' }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                    </svg>
-                  </div>
-                  <p className="text-center">No messages yet</p>
-                  <p className="text-sm text-center">Send a message to start the conversation</p>
+            <div className={`flex-1 p-2 sm:p-3 overflow-y-auto custom-scrollbar chat-container ${mobileView ? 'has-bottom-nav' : ''} relative`} style={{ backgroundColor: '#FFFFFF' }}>
+              <div className="absolute bottom-0 left-0 right-0 text-center py-2 text-xs opacity-60 z-10" style={{ color: 'var(--text-secondary)' }}>
+                <div className="flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  Messages are end-to-end encrypted
                 </div>
-              ) : (
-                <div className="space-y-1 sm:space-y-3">
-                  {messages.map((message, index) => {
-                    // Group messages by sender and date
-                    const showSenderInfo = index === 0 ||
-                      messages[index - 1].sender !== message.sender ||
-                      new Date(message.createdAt).getTime() - new Date(messages[index - 1].createdAt).getTime() > 5 * 60 * 1000;
+              </div>
+              <div className="relative z-10">
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--text-secondary)' }}>
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'var(--bg-hover)' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                      </svg>
+                    </div>
+                    <p className="text-center">No messages yet</p>
+                    <p className="text-sm text-center">Send a message to start the conversation</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 sm:space-y-3">
+                    {messages.map((message, index) => {
+                      // Group messages by sender and date
+                      const showSenderInfo = index === 0 ||
+                        messages[index - 1].sender !== message.sender ||
+                        new Date(message.createdAt).getTime() - new Date(messages[index - 1].createdAt).getTime() > 5 * 60 * 1000;
 
-                    return (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, background: { duration: 0 } }}
-                        className={`flex ${message.sender === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
-                      >
+                      return (
                         <div
-                          className={`chat-bubble group ${message.sender === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
-                          onContextMenu={(e) => handleMessageContextMenu(e, message)}
-                          style={{
-                            opacity: message.isDeleted ? 0.7 : 1,
-                            cursor: message.isDeleted ? 'default' : 'context-menu'
-                          }}
+                          key={index}
+                          className={`flex ${message.sender === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
                         >
-                          {message.isForwarded && !message.isDeleted && (
-                            <p className="text-xs italic mb-1" style={{ color: 'var(--text-secondary)' }}>
-                              Forwarded
-                            </p>
-                          )}
-
-                          {message.isReply && message.replyTo && !message.isDeleted && (
-                            <div className="mb-1 p-1 rounded-md" style={{ backgroundColor: 'var(--bg-hover)' }}>
-                              <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                                Replying to {message.replyTo.sender === user._id ? 'yourself' : 'message'}
+                          <div
+                            className={`chat-bubble group ${message.sender === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
+                            onContextMenu={(e) => handleMessageContextMenu(e, message)}
+                            style={{
+                              opacity: message.isDeleted ? 0.7 : 1,
+                              cursor: message.isDeleted ? 'default' : 'context-menu'
+                            }}
+                          >
+                            {message.isForwarded && !message.isDeleted && (
+                              <p className="text-xs italic mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                Forwarded
                               </p>
-                              <div className="pl-2 border-l-2 border-primary">
-                                {message.replyTo.messageType === 'voice' ? (
-                                  <div className="flex items-center space-x-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                      <line x1="12" y1="19" x2="12" y2="22" />
-                                    </svg>
-                                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Voice message</span>
+                            )}
+
+                            {message.isReply && message.replyTo && !message.isDeleted && (
+                              <div className="mb-1 p-1 rounded-md" style={{ backgroundColor: 'var(--bg-hover)' }}>
+                                <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                                  Replying to {message.replyTo.sender === user._id ? 'yourself' : 'message'}
+                                </p>
+                                <div className="pl-2 border-l-2 border-primary">
+                                  {message.replyTo.messageType === 'voice' ? (
+                                    <div className="flex items-center space-x-1">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                        <line x1="12" y1="19" x2="12" y2="22" />
+                                      </svg>
+                                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Voice message</span>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs truncate max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
+                                      {message.replyTo.text}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {message.isDeleted ? (
+                              <p className="italic" style={{ color: 'var(--text-secondary)' }}>
+                                This message was deleted
+                              </p>
+                            ) : message.messageType === 'voice' ? (
+                              <div className="voice-message overflow-hidden">
+                                <AudioWaveform
+                                  audioUrl={message.voiceUrl}
+                                  isSender={message.sender === user._id}
+                                  timestamp={new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                />
+                              </div>
+                            ) : (
+                              <p ref={el => {
+                                // Store reference if this message is in search results
+                                if (searchResults.some(result => result._id === message._id)) {
+                                  searchResultRefs.current[message._id] = el;
+
+                                  // Add highlight if this is the current search result
+                                  if (searchResults[currentSearchIndex]?._id === message._id) {
+                                    el?.classList.add('ring-2', 'ring-primary', 'ring-offset-1');
+                                  } else {
+                                    el?.classList.remove('ring-2', 'ring-primary', 'ring-offset-1');
+                                  }
+                                }
+                              }}>
+                                {highlightSearchText(message.text)}
+                              </p>
+                            )}
+
+                            {/* Reactions display */}
+                            {message.reactions && message.reactions.length > 0 && !message.isDeleted && (
+                              <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                                {/* Group reactions by emoji */}
+                                {Object.entries(
+                                  message.reactions.reduce((acc, reaction) => {
+                                    acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+                                    return acc;
+                                  }, {})
+                                ).map(([emoji, count]) => (
+                                  <div
+                                    key={emoji}
+                                    className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
+                                      ? 'bg-primary text-white'
+                                      : 'bg-gray-100 dark:bg-gray-700'
+                                      }`}
+                                  >
+                                    <span className="mr-1">{emoji}</span>
+                                    {count > 1 && <span>{count}</span>}
                                   </div>
-                                ) : (
-                                  <p className="text-xs truncate max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {message.replyTo.text}
-                                  </p>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between mt-1 space-x-1">
+                              <div className="flex items-center">
+                                {!message.isDeleted && (
+                                  <button
+                                    onClick={(e) => handleOpenReactionPicker(e, message)}
+                                    className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Add reaction"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                                      <line x1="9" y1="9" x2="9.01" y2="9" />
+                                      <line x1="15" y1="9" x2="15.01" y2="9" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="flex items-center space-x-1">
+                                {message.sender === user._id && !message.isDeleted && (
+                                  <span className="text-xs">
+                                    {message.read || readMessages.includes(message._id) ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M18 6L7 17L2 12" />
+                                        <path d="M22 10L11 21L9 19" />
+                                      </svg>
+                                    ) : (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M5 12L10 17L20 7" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                )}
+                                {message.messageType !== 'voice' && (
+                                  <div className="text-xs" style={{
+                                    color: message.sender === user._id ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.5)',
+                                    textAlign: 'right',
+                                    marginTop: '2px',
+                                    fontSize: '0.7rem'
+                                  }}>
+                                    {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {message.sender === user._id && (
+                                      <span className="ml-1">
+                                        {message.read || readMessages.includes(message._id) ? (
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M18 6L7 17L2 12" />
+                                            <path d="M22 10L11 21L9 19" />
+                                          </svg>
+                                        ) : (
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M5 12L10 17L20 7" />
+                                          </svg>
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             </div>
-                          )}
-
-                          {message.isDeleted ? (
-                            <p className="italic" style={{ color: 'var(--text-secondary)' }}>
-                              This message was deleted
-                            </p>
-                          ) : message.messageType === 'voice' ? (
-                            <div className="flex flex-col space-y-2">
-                              <div className="flex items-center space-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                  <line x1="12" y1="19" x2="12" y2="22" />
-                                </svg>
-                                <span style={{ color: 'var(--text-secondary)' }}>
-                                  Voice message ({Math.floor(message.duration / 60)}:{(message.duration % 60).toString().padStart(2, '0')})
-                                </span>
-                              </div>
-                              <audio src={message.voiceUrl} controls className="w-full" preload="none" />
-                            </div>
-                          ) : (
-                            <p ref={el => {
-                              // Store reference if this message is in search results
-                              if (searchResults.some(result => result._id === message._id)) {
-                                searchResultRefs.current[message._id] = el;
-
-                                // Add highlight if this is the current search result
-                                if (searchResults[currentSearchIndex]?._id === message._id) {
-                                  el?.classList.add('ring-2', 'ring-primary', 'ring-offset-1');
-                                } else {
-                                  el?.classList.remove('ring-2', 'ring-primary', 'ring-offset-1');
-                                }
-                              }
-                            }}>
-                              {highlightSearchText(message.text)}
-                            </p>
-                          )}
-
-                          {/* Reactions display */}
-                          {message.reactions && message.reactions.length > 0 && !message.isDeleted && (
-                            <div className="flex flex-wrap gap-1 mt-1 mb-1">
-                              {/* Group reactions by emoji */}
-                              {Object.entries(
-                                message.reactions.reduce((acc, reaction) => {
-                                  acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
-                                  return acc;
-                                }, {})
-                              ).map(([emoji, count]) => (
-                                <div
-                                  key={emoji}
-                                  className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
-                                    ? 'bg-primary text-white'
-                                    : 'bg-gray-100 dark:bg-gray-700'
-                                    }`}
-                                >
-                                  <span className="mr-1">{emoji}</span>
-                                  {count > 1 && <span>{count}</span>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-between mt-1 space-x-1">
-                            <div className="flex items-center">
-                              {!message.isDeleted && (
-                                <button
-                                  onClick={(e) => handleOpenReactionPicker(e, message)}
-                                  className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Add reaction"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                                    <line x1="9" y1="9" x2="9.01" y2="9" />
-                                    <line x1="15" y1="9" x2="15.01" y2="9" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="flex items-center space-x-1">
-                              {message.sender === user._id && !message.isDeleted && (
-                                <span className="text-xs">
-                                  {message.read || readMessages.includes(message._id) ? (
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M18 6L7 17L2 12" />
-                                      <path d="M22 10L11 21L9 19" />
-                                    </svg>
-                                  ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M5 12L10 17L20 7" />
-                                    </svg>
-                                  )}
-                                </span>
-                              )}
-                              <p className="text-xs text-gray-500">
-                                {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
                           </div>
                         </div>
-                      </motion.div>
-                    );
-                  })}
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
             </div>
 
             {showVoiceRecorder ? (
@@ -1538,86 +1776,124 @@ const Chat = ({ user, setUser }) => {
                 onCancel={() => setShowVoiceRecorder(false)}
               />
             ) : (
-              <form onSubmit={handleSendMessage} className="mobile-message-input p-2 sm:p-4 border-t flex items-center space-x-1 sm:space-x-2" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
-                <Input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => {
-                    setNewMessage(e.target.value);
+              <motion.form
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                onSubmit={handleSendMessage}
+                className="mobile-message-input p-2 border-t flex items-center space-x-2 mobile-safe-area"
+                style={{
+                  backgroundColor: 'var(--bg-panel)',
+                  borderColor: 'var(--border-color)',
+                  boxShadow: '0 -2px 6px rgba(0, 0, 0, 0.03)'
+                }}
+              >
+                <div className="flex-1 relative bg-gray-100 rounded-full px-4 py-2 flex items-center">
+                  <Input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => {
+                      setNewMessage(e.target.value);
 
-                    // Handle typing indicator
-                    if (socket && selectedContact) {
-                      // Clear any existing timeout
-                      if (typingTimeoutRef.current) {
-                        clearTimeout(typingTimeoutRef.current);
+                      // Handle typing indicator
+                      if (socket && selectedContact) {
+                        // Clear any existing timeout
+                        if (typingTimeoutRef.current) {
+                          clearTimeout(typingTimeoutRef.current);
+                        }
+
+                        // Only emit typing if not already typing
+                        if (!isTyping) {
+                          setIsTyping(true);
+                          socket.emit('typing', {
+                            senderId: user._id,
+                            receiverId: selectedContact._id
+                          });
+                        }
+
+                        // Set timeout to stop typing indicator after 3 seconds of inactivity
+                        typingTimeoutRef.current = setTimeout(() => {
+                          setIsTyping(false);
+                          socket.emit('stopTyping', {
+                            senderId: user._id,
+                            receiverId: selectedContact._id
+                          });
+                        }, 3000);
                       }
+                    }}
+                    placeholder="Type a message..."
+                    className="flex-1 text-sm border-0 bg-transparent focus:ring-0 focus:outline-none"
+                    style={{
+                      height: '36px',
+                      backgroundColor: 'transparent',
+                      boxShadow: 'none'
+                    }}
+                  />
 
-                      // Only emit typing if not already typing
-                      if (!isTyping) {
-                        setIsTyping(true);
-                        socket.emit('typing', {
-                          senderId: user._id,
-                          receiverId: selectedContact._id
-                        });
-                      }
+                  {/* Voice message button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowVoiceRecorder(true)}
+                    className="ml-2 text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="22" />
+                    </svg>
+                  </button>
+                </div>
 
-                      // Set timeout to stop typing indicator after 3 seconds of inactivity
-                      typingTimeoutRef.current = setTimeout(() => {
-                        setIsTyping(false);
-                        socket.emit('stopTyping', {
-                          senderId: user._id,
-                          receiverId: selectedContact._id
-                        });
-                      }, 3000);
-                    }
-                  }}
-                  placeholder="Type a message..."
-                  className="flex-1 mobile-input text-sm sm:text-base"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowVoiceRecorder(true)}
-                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                  title="Record voice message"
-                  style={{ color: 'var(--text-primary)' }}
+                {/* Send Button */}
+                <motion.div
+                  whileHover={{ scale: newMessage.trim() ? 1.05 : 1 }}
+                  whileTap={{ scale: newMessage.trim() ? 0.95 : 1 }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="22" />
-                  </svg>
-                </button>
-                <Button
-                  type="submit"
-                  disabled={!newMessage.trim()}
-                  className="mobile-btn p-1.5 sm:p-2 rounded-full"
-                  size="sm"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </Button>
-              </form>
+                  <Button
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    className="p-3 rounded-full flex-shrink-0 transition-all duration-200"
+                    size="sm"
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      background: '#0A85FF',
+                      opacity: newMessage.trim() ? 1 : 0.7
+                    }}
+                  >
+                    <motion.div
+                      animate={newMessage.trim() ? { rotate: [0, 15, 0] } : {}}
+                      transition={{ duration: 0.5, repeat: 0 }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    </motion.div>
+                  </Button>
+                </motion.div>
+              </motion.form>
             )}
           </>
         ) : selectedGroup ? (
           <>
-            <div className="mobile-header p-3 sm:p-4 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                {mobileView && (
-                  <button
-                    onClick={() => setShowContacts(true)}
-                    className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                    aria-label="Back to contacts"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="15 18 9 12 15 6" />
-                    </svg>
-                  </button>
-                )}
+            <div
+              className="mobile-header p-2 border-b flex items-center justify-between"
+              style={{ backgroundColor: '#F2F2F7', borderColor: 'var(--border-color)' }}
+              onContextMenu={handleChatContextMenu}
+            >
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleBackNavigation}
+                  className="p-1 rounded-full hover:bg-gray-100/10"
+                  aria-label="Back to contacts"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
                 <div className="relative">
-                  <div className="mobile-avatar w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                     {selectedGroup.groupPhoto ? (
                       <img
                         src={selectedGroup.groupPhoto}
@@ -1625,41 +1901,51 @@ const Chat = ({ user, setUser }) => {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <span className="text-lg font-semibold text-primary">{selectedGroup?.name ? selectedGroup.name.charAt(0) : '?'}</span>
+                      <span className="text-base font-semibold text-primary">{selectedGroup?.name ? selectedGroup.name.charAt(0) : '?'}</span>
                     )}
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-medium truncate text-sm sm:text-base" style={{ color: 'var(--text-primary)' }}>{selectedGroup.name}</h3>
-                  <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
+                  <h3 className="font-medium truncate text-sm text-gray-800">{selectedGroup.name}</h3>
+                  <p className="text-xs truncate text-gray-500">
                     {selectedGroup.members.length} members
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-1 sm:space-x-2">
+              <div className="flex items-center space-x-1">
                 <button
                   onClick={toggleSearch}
-                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="p-1.5 rounded-full hover:bg-gray-100/10"
                   title="Search messages"
-                  style={{ color: 'var(--text-primary)' }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8" />
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
                 </button>
                 <button
                   onClick={() => setShowGroupDetailsModal(true)}
-                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="p-1.5 rounded-full hover:bg-gray-100/10"
                   title="Group info"
-                  style={{ color: 'var(--text-primary)' }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
                     <line x1="12" y1="16" x2="12" y2="12" />
                     <line x1="12" y1="8" x2="12.01" y2="8" />
                   </svg>
                 </button>
+                {!mobileView && (
+                  <button
+                    onClick={handleBackNavigation}
+                    className="p-1.5 rounded-full hover:bg-gray-100/10"
+                    title="Close chat"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1704,184 +1990,193 @@ const Chat = ({ user, setUser }) => {
               </div>
             )}
 
-            <div className="flex-1 p-3 sm:p-4 overflow-y-auto custom-scrollbar" style={{ backgroundColor: 'var(--chat-bg)' }}>
-              {groupMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--text-secondary)' }}>
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'var(--bg-hover)' }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                    </svg>
-                  </div>
-                  <p className="text-center">No messages yet</p>
-                  <p className="text-sm text-center">Send a message to start the group conversation</p>
+            <div className={`flex-1 p-2 sm:p-3 overflow-y-auto custom-scrollbar chat-container ${mobileView ? 'has-bottom-nav' : ''} relative`} style={{ backgroundColor: '#FFFFFF' }}>
+              <div className="absolute bottom-0 left-0 right-0 text-center py-2 text-xs opacity-60 z-10" style={{ color: 'var(--text-secondary)' }}>
+                <div className="flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  Messages are end-to-end encrypted
                 </div>
-              ) : (
-                <div className="space-y-1 sm:space-y-3">
-                  {groupMessages.map((message, index) => {
-                    // Group messages by sender and date
-                    const showSenderInfo = index === 0 ||
-                      groupMessages[index - 1].sender._id !== message.sender._id ||
-                      new Date(message.createdAt).getTime() - new Date(groupMessages[index - 1].createdAt).getTime() > 5 * 60 * 1000;
+              </div>
+              <div className="relative z-10">
+                {groupMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--text-secondary)' }}>
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'var(--bg-hover)' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </svg>
+                    </div>
+                    <p className="text-center">No messages yet</p>
+                    <p className="text-sm text-center">Send a message to start the group conversation</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 sm:space-y-3">
+                    {groupMessages.map((message, index) => {
+                      // Group messages by sender and date
+                      const showSenderInfo = index === 0 ||
+                        groupMessages[index - 1].sender._id !== message.sender._id ||
+                        new Date(message.createdAt).getTime() - new Date(groupMessages[index - 1].createdAt).getTime() > 5 * 60 * 1000;
 
-                    return (
-                      <motion.div
-                        key={index}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, background: { duration: 0 } }}
-                        className={`flex ${message.sender._id === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
-                      >
-                        {message.sender._id !== user._id && (
-                          <div className="flex-shrink-0 mr-2 self-end mb-1">
-                            <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
-                              {message.sender.profilePhoto ? (
-                                <img
-                                  src={message.sender.profilePhoto}
-                                  alt={message.sender.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span className="text-sm font-semibold text-gray-700">{message.sender?.name ? message.sender.name.charAt(0) : '?'}</span>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                      return (
                         <div
-                          className={`chat-bubble group ${message.sender._id === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
-                          onContextMenu={(e) => handleGroupMessageContextMenu(e, message)}
-                          style={{
-                            opacity: message.isDeleted ? 0.7 : 1,
-                            cursor: message.isDeleted ? 'default' : 'context-menu'
-                          }}
+                          key={index}
+                          className={`flex ${message.sender._id === user._id ? 'justify-end' : 'justify-start'} ${showSenderInfo ? 'mt-2' : 'mt-0.5'}`}
                         >
-                          {message.sender._id !== user._id && !message.isDeleted && (
-                            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
-                              {message.sender.name}
-                            </p>
-                          )}
-
-                          {message.isForwarded && !message.isDeleted && (
-                            <p className="text-xs italic mb-1" style={{ color: 'var(--text-secondary)' }}>
-                              Forwarded
-                            </p>
-                          )}
-
-                          {message.isReply && message.replyTo && !message.isDeleted && (
-                            <div className="mb-1 p-1 rounded-md" style={{ backgroundColor: 'var(--bg-hover)' }}>
-                              <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                                Replying to {message.replyTo.sender._id === user._id ? 'yourself' : message.replyTo.sender.name}
-                              </p>
-                              <div className="pl-2 border-l-2 border-primary">
-                                {message.replyTo.messageType === 'voice' ? (
-                                  <div className="flex items-center space-x-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                      <line x1="12" y1="19" x2="12" y2="22" />
-                                    </svg>
-                                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Voice message</span>
-                                  </div>
+                          {message.sender._id !== user._id && (
+                            <div className="flex-shrink-0 mr-2 self-end mb-1">
+                              <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
+                                {message.sender.profilePhoto ? (
+                                  <img
+                                    src={message.sender.profilePhoto}
+                                    alt={message.sender.name}
+                                    className="w-full h-full object-cover"
+                                  />
                                 ) : (
-                                  <p className="text-xs truncate max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {message.replyTo.text}
-                                  </p>
+                                  <span className="text-sm font-semibold text-gray-700">{message.sender?.name ? message.sender.name.charAt(0) : '?'}</span>
                                 )}
                               </div>
                             </div>
                           )}
+                          <div
+                            className={`chat-bubble group ${message.sender._id === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
+                            onContextMenu={(e) => handleGroupMessageContextMenu(e, message)}
+                            style={{
+                              opacity: message.isDeleted ? 0.7 : 1,
+                              cursor: message.isDeleted ? 'default' : 'context-menu'
+                            }}
+                          >
+                            {message.sender._id !== user._id && !message.isDeleted && (
+                              <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                {message.sender.name}
+                              </p>
+                            )}
 
-                          {message.isDeleted ? (
-                            <p className="italic" style={{ color: 'var(--text-secondary)' }}>
-                              This message was deleted
-                            </p>
-                          ) : message.messageType === 'voice' ? (
-                            <div className="flex flex-col space-y-2">
-                              <div className="flex items-center space-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                  <line x1="12" y1="19" x2="12" y2="22" />
-                                </svg>
-                                <span style={{ color: 'var(--text-secondary)' }}>
-                                  Voice message ({Math.floor(message.duration / 60)}:{(message.duration % 60).toString().padStart(2, '0')})
-                                </span>
-                              </div>
-                              <audio src={message.voiceUrl} controls className="w-full" preload="none" />
-                            </div>
-                          ) : (
-                            <p ref={el => {
-                              // Store reference if this message is in search results
-                              if (searchResults.some(result => result._id === message._id)) {
-                                searchResultRefs.current[message._id] = el;
+                            {message.isForwarded && !message.isDeleted && (
+                              <p className="text-xs italic mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                Forwarded
+                              </p>
+                            )}
 
-                                // Add highlight if this is the current search result
-                                if (searchResults[currentSearchIndex]?._id === message._id) {
-                                  el?.classList.add('ring-2', 'ring-primary', 'ring-offset-1');
-                                } else {
-                                  el?.classList.remove('ring-2', 'ring-primary', 'ring-offset-1');
-                                }
-                              }
-                            }}>
-                              {highlightSearchText(message.text)}
-                            </p>
-                          )}
-
-                          {/* Reactions display */}
-                          {message.reactions && message.reactions.length > 0 && !message.isDeleted && (
-                            <div className="flex flex-wrap gap-1 mt-1 mb-1">
-                              {/* Group reactions by emoji */}
-                              {Object.entries(
-                                message.reactions.reduce((acc, reaction) => {
-                                  acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
-                                  return acc;
-                                }, {})
-                              ).map(([emoji, count]) => (
-                                <div
-                                  key={emoji}
-                                  className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
-                                    ? 'bg-primary text-white'
-                                    : 'bg-gray-100 dark:bg-gray-700'
-                                    }`}
-                                >
-                                  <span className="mr-1">{emoji}</span>
-                                  {count > 1 && <span>{count}</span>}
+                            {message.isReply && message.replyTo && !message.isDeleted && (
+                              <div className="mb-1 p-1 rounded-md" style={{ backgroundColor: 'var(--bg-hover)' }}>
+                                <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                                  Replying to {message.replyTo.sender._id === user._id ? 'yourself' : message.replyTo.sender.name}
+                                </p>
+                                <div className="pl-2 border-l-2 border-primary">
+                                  {message.replyTo.messageType === 'voice' ? (
+                                    <div className="flex items-center space-x-1">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                        <line x1="12" y1="19" x2="12" y2="22" />
+                                      </svg>
+                                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Voice message</span>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs truncate max-w-[200px]" style={{ color: 'var(--text-secondary)' }}>
+                                      {message.replyTo.text}
+                                    </p>
+                                  )}
                                 </div>
-                              ))}
-                            </div>
-                          )}
+                              </div>
+                            )}
 
-                          <div className="flex items-center justify-between mt-1 space-x-1">
-                            <div className="flex items-center">
-                              {!message.isDeleted && (
-                                <button
-                                  onClick={(e) => handleOpenReactionPicker(e, message)}
-                                  className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Add reaction"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                                    <line x1="9" y1="9" x2="9.01" y2="9" />
-                                    <line x1="15" y1="9" x2="15.01" y2="9" />
-                                  </svg>
-                                </button>
+                            {message.isDeleted ? (
+                              <p className="italic" style={{ color: 'var(--text-secondary)' }}>
+                                This message was deleted
+                              </p>
+                            ) : message.messageType === 'voice' ? (
+                              <div className="voice-message overflow-hidden">
+                                <AudioWaveform
+                                  audioUrl={message.voiceUrl}
+                                  isSender={message.sender._id === user._id}
+                                  timestamp={new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                />
+                              </div>
+                            ) : (
+                              <p ref={el => {
+                                // Store reference if this message is in search results
+                                if (searchResults.some(result => result._id === message._id)) {
+                                  searchResultRefs.current[message._id] = el;
+
+                                  // Add highlight if this is the current search result
+                                  if (searchResults[currentSearchIndex]?._id === message._id) {
+                                    el?.classList.add('ring-2', 'ring-primary', 'ring-offset-1');
+                                  } else {
+                                    el?.classList.remove('ring-2', 'ring-primary', 'ring-offset-1');
+                                  }
+                                }
+                              }}>
+                                {highlightSearchText(message.text)}
+                              </p>
+                            )}
+
+                            {/* Reactions display */}
+                            {message.reactions && message.reactions.length > 0 && !message.isDeleted && (
+                              <div className="flex flex-wrap gap-1 mt-1 mb-1">
+                                {/* Group reactions by emoji */}
+                                {Object.entries(
+                                  message.reactions.reduce((acc, reaction) => {
+                                    acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+                                    return acc;
+                                  }, {})
+                                ).map(([emoji, count]) => (
+                                  <div
+                                    key={emoji}
+                                    className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
+                                      ? 'bg-primary text-white'
+                                      : 'bg-gray-100 dark:bg-gray-700'
+                                      }`}
+                                  >
+                                    <span className="mr-1">{emoji}</span>
+                                    {count > 1 && <span>{count}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between mt-1 space-x-1">
+                              <div className="flex items-center">
+                                {!message.isDeleted && (
+                                  <button
+                                    onClick={(e) => handleOpenReactionPicker(e, message)}
+                                    className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Add reaction"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-secondary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                                      <line x1="9" y1="9" x2="9.01" y2="9" />
+                                      <line x1="15" y1="9" x2="15.01" y2="9" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+
+                              {message.messageType !== 'voice' && (
+                                <div className="text-xs" style={{
+                                  color: message.sender._id === user._id ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.5)',
+                                  textAlign: 'right',
+                                  marginTop: '2px',
+                                  fontSize: '0.7rem'
+                                }}>
+                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
                               )}
                             </div>
-
-                            <p className="text-xs text-gray-500">
-                              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
                           </div>
                         </div>
-                      </motion.div>
-                    );
-                  })}
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
+                      );
+                    })}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
             </div>
 
             {showVoiceRecorder ? (
@@ -1890,87 +2185,118 @@ const Chat = ({ user, setUser }) => {
                 onCancel={() => setShowVoiceRecorder(false)}
               />
             ) : (
-              <form onSubmit={handleSendGroupMessage} className="mobile-message-input p-2 sm:p-4 border-t flex items-center space-x-1 sm:space-x-2" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'var(--border-color)' }}>
-                <Input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type a message..."
-                  className="flex-1 mobile-input text-sm sm:text-base"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowVoiceRecorder(true)}
-                  className="mobile-btn p-1.5 sm:p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                  title="Record voice message"
-                  style={{ color: 'var(--text-primary)' }}
+              <motion.form
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                onSubmit={handleSendGroupMessage}
+                className="mobile-message-input p-2 border-t flex items-center space-x-2 mobile-safe-area"
+                style={{
+                  backgroundColor: 'var(--bg-panel)',
+                  borderColor: 'var(--border-color)',
+                  boxShadow: '0 -2px 6px rgba(0, 0, 0, 0.03)'
+                }}
+              >
+                <div className="flex-1 relative bg-gray-100 rounded-full px-4 py-2 flex items-center">
+                  <Input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Type a message..."
+                    className="flex-1 text-sm border-0 bg-transparent focus:ring-0 focus:outline-none"
+                    style={{
+                      height: '36px',
+                      backgroundColor: 'transparent',
+                      boxShadow: 'none'
+                    }}
+                  />
+
+                  {/* Voice message button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowVoiceRecorder(true)}
+                    className="ml-2 text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="22" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Send Button */}
+                <motion.div
+                  whileHover={{ scale: newMessage.trim() ? 1.05 : 1 }}
+                  whileTap={{ scale: newMessage.trim() ? 0.95 : 1 }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="22" />
-                  </svg>
-                </button>
-                <Button
-                  type="submit"
-                  disabled={!newMessage.trim()}
-                  className="mobile-btn p-1.5 sm:p-2 rounded-full"
-                  size="sm"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </Button>
-              </form>
+                  <Button
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    className="p-3 rounded-full flex-shrink-0 transition-all duration-200"
+                    size="sm"
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      background: '#0A85FF',
+                      opacity: newMessage.trim() ? 1 : 0.7
+                    }}
+                  >
+                    <motion.div
+                      animate={newMessage.trim() ? { rotate: [0, 15, 0] } : {}}
+                      transition={{ duration: 0.5, repeat: 0 }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    </motion.div>
+                  </Button>
+                </motion.div>
+              </motion.form>
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full p-4" style={{ backgroundColor: 'var(--bg-panel)' }}>
-            {mobileView && (
-              <button
-                onClick={() => setShowContacts(true)}
-                className="absolute top-4 left-4 p-2 rounded-full bg-white shadow-md z-10"
-                aria-label="Open contacts"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
-                </svg>
-              </button>
-            )}
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5, background: { duration: 0 } }}
-              className="text-center px-4"
-            >
-              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-primary bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-12 sm:w-12 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                </svg>
+          <>
+            {/* On mobile, automatically show contacts instead of welcome screen */}
+            {mobileView ? (
+              <div className="hidden">
+                {/* This is hidden but we use a useEffect to trigger showing contacts */}
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Welcome to WhatsApp Web</h2>
-              <p className="max-w-md mx-auto text-sm sm:text-base" style={{ color: 'var(--text-secondary)' }}>
-                {mobileView ? 'Tap the menu button to select a contact' : 'Select a contact or group from the sidebar to start messaging'}
-              </p>
-              {mobileView && (
-                <button
-                  onClick={() => setShowContacts(true)}
-                  className="mt-6 bg-primary text-white px-4 py-2 rounded-md shadow-md flex items-center justify-center mx-auto"
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full p-4 relative overflow-hidden" style={{ backgroundColor: 'var(--bg-panel)' }}>
+                <div className="absolute inset-0 bg-gradient-to-br from-transparent via-blue-50 to-purple-50 opacity-20"></div>
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0, y: 10 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, type: "spring", stiffness: 100 }}
+                  className="text-center px-4 relative z-10 bg-white bg-opacity-80 py-8 px-6 rounded-xl shadow-lg"
+                  style={{ backdropFilter: "blur(8px)" }}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                  View Contacts
-                </button>
-              )}
-            </motion.div>
-          </div>
+                  <div className="w-32 h-32 sm:w-40 sm:h-40 flex items-center justify-center mx-auto mb-6 sm:mb-8">
+                    <div className="w-full h-full rounded-full overflow-hidden bg-gray-900 p-2 shadow-lg" style={{ boxShadow: '0 0 20px rgba(104, 109, 224, 0.5)' }}>
+                      <img
+                        src="/chat-logo.png"
+                        alt="AK Chats Logo"
+                        className="w-full h-full object-contain rounded-full"
+                      />
+                    </div>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-bold mb-3" style={{ color: 'var(--text-primary)', background: 'linear-gradient(90deg, #4776E6 0%, #8E54E9 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                    Welcome to AK Chats
+                  </h2>
+                  <p className="max-w-md mx-auto text-sm sm:text-base mb-4" style={{ color: 'var(--text-secondary)' }}>
+                    Select a contact or group from the sidebar to start messaging
+                  </p>
+                  <div className="flex justify-center space-x-2 opacity-70">
+                    <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                    <span className="w-2 h-2 bg-purple-400 rounded-full"></span>
+                    <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1984,6 +2310,14 @@ const Chat = ({ user, setUser }) => {
         onReply={handleReply}
         position={menuPosition}
         isSender={selectedMessage?.sender === user?._id}
+      />
+
+      {/* Chat Context Menu */}
+      <ChatContextMenu
+        isOpen={chatMenuOpen}
+        onClose={handleCloseChatMenu}
+        onCloseChat={handleBackNavigation}
+        position={chatMenuPosition}
       />
 
       {/* Reaction Picker */}
@@ -2007,68 +2341,7 @@ const Chat = ({ user, setUser }) => {
         }
       />
 
-      {/* Profile Photo Modal */}
-      {showProfileModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ background: { duration: 0 } }}
-            className="rounded-lg shadow-xl p-6 w-full max-w-md"
-            style={{ backgroundColor: 'var(--bg-panel)', color: 'var(--text-primary)' }}
-          >
-            <h3 className="text-xl font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Update Profile Photo</h3>
-
-            <div className="mb-6 flex justify-center">
-              <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-primary">
-                {newProfilePhoto ? (
-                  <img
-                    src={newProfilePhoto}
-                    alt="New profile"
-                    className="w-full h-full object-cover"
-                  />
-                ) : user?.profilePhoto ? (
-                  <img
-                    src={user.profilePhoto}
-                    alt={user.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                    <span className="text-3xl font-bold text-gray-500">{user?.name ? user.name.charAt(0) : '?'}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <FileUpload
-              onFileSelect={setNewProfilePhoto}
-              className="mb-6"
-              buttonText="Choose New Photo"
-              variant="default"
-              size="default"
-            />
-
-            <div className="flex justify-end space-x-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowProfileModal(false);
-                  setNewProfilePhoto('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={updateProfilePhoto}
-                disabled={!newProfilePhoto}
-              >
-                Save Photo
-              </Button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+      {/* Profile Photo Modal - Removed in favor of dedicated profile page */}
 
       {/* Create Group Modal */}
       <CreateGroupModal
@@ -2147,6 +2420,117 @@ const Chat = ({ user, setUser }) => {
         message={selectedMessage}
         onSendReply={selectedGroup ? handleSendGroupReply : handleSendReply}
       />
+
+      {/* Floating Action Button for new message - Enhanced */}
+      {mobileView && showContacts && !selectedContact && !selectedGroup && (
+        <motion.button
+          onClick={() => setShowAddContactModal(true)}
+          className="fixed z-50 bottom-20 right-4 w-14 h-14 rounded-full flex items-center justify-center shadow-xl"
+          style={{
+            background: 'linear-gradient(135deg, #FF7A59 0%, #FF5A5F 100%)',
+            boxShadow: '0 4px 10px rgba(255, 122, 89, 0.5)'
+          }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.2
+          }}
+        >
+          <motion.div
+            animate={{ rotate: 180 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </motion.div>
+        </motion.button>
+      )}
+
+      {/* Mobile Bottom Navigation - Enhanced Style - Only show when not in a chat */}
+      {mobileView && showContacts && !selectedContact && !selectedGroup && (
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className="mobile-bottom-nav mobile-safe-area"
+          style={{
+            backgroundColor: '#004C99',
+            borderTopLeftRadius: '16px',
+            borderTopRightRadius: '16px',
+            boxShadow: '0 -4px 10px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          <button
+            className="mobile-bottom-nav-item relative overflow-hidden group"
+            onClick={() => navigate('/profile')}
+          >
+            <motion.div
+              whileTap={{ scale: 0.9 }}
+              className="flex flex-col items-center"
+            >
+              <div className="p-2 rounded-full bg-white bg-opacity-10 mb-1 group-hover:bg-opacity-20 transition-all duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+              </div>
+              <span className="text-xs text-white font-medium">Settings</span>
+            </motion.div>
+          </button>
+
+          <button
+            className="mobile-bottom-nav-item relative overflow-hidden group"
+            onClick={() => setShowContactRequestsModal(true)}
+          >
+            <motion.div
+              whileTap={{ scale: 0.9 }}
+              className="flex flex-col items-center"
+            >
+              <div className="p-2 rounded-full bg-white bg-opacity-10 mb-1 group-hover:bg-opacity-20 transition-all duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+                {pendingRequestsCount > 0 && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold"
+                  >
+                    {pendingRequestsCount > 9 ? '9+' : pendingRequestsCount}
+                  </motion.span>
+                )}
+              </div>
+              <span className="text-xs text-white font-medium">Requests</span>
+            </motion.div>
+          </button>
+
+          <button
+            className="mobile-bottom-nav-item relative overflow-hidden group"
+            onClick={() => setShowCreateGroupModal(true)}
+          >
+            <motion.div
+              whileTap={{ scale: 0.9 }}
+              className="flex flex-col items-center"
+            >
+              <div className="p-2 rounded-full bg-white bg-opacity-10 mb-1 group-hover:bg-opacity-20 transition-all duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="16"></line>
+                  <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+              </div>
+              <span className="text-xs text-white font-medium">New Group</span>
+            </motion.div>
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 };
