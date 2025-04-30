@@ -38,6 +38,10 @@ const Register = ({ setUser }) => {
       });
 
       const userData = response.data;
+
+      // Mark this as a newly registered user to show the tour
+      localStorage.setItem('ak_chats_new_user', 'true');
+
       localStorage.setItem('whatsapp_user', JSON.stringify(userData));
       setUser(userData);
       navigate('/');

@@ -69,6 +69,15 @@ const TipManager = () => {
 
   // Show a tip
   const showTip = (tipId) => {
+    // Only show tips for new users
+    const isNewUser = localStorage.getItem('ak_chats_new_user') === 'true';
+    const hasVisitedBefore = localStorage.getItem('ak_chats_visited') === 'true';
+
+    // If not a new user and hasn't seen the welcome modal, don't show tips
+    if (!isNewUser && !hasVisitedBefore) {
+      return;
+    }
+
     // Check if this tip has been shown before
     const tipsShown = JSON.parse(localStorage.getItem('ak_chats_tips_shown') || '{}');
 

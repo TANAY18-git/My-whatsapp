@@ -1,8 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const HelpButton = ({ onStartTour }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showButton, setShowButton] = useState(false);
+
+  // Only show help button for new users or if they've seen the welcome modal
+  useEffect(() => {
+    const hasVisitedBefore = localStorage.getItem('ak_chats_visited');
+    const isNewUser = localStorage.getItem('ak_chats_new_user');
+
+    if (hasVisitedBefore === 'true' || isNewUser === 'true') {
+      setShowButton(true);
+    }
+  }, []);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -10,14 +21,17 @@ const HelpButton = ({ onStartTour }) => {
 
   const handleStartTour = () => {
     setIsMenuOpen(false);
-    
+
     // Remove the tour seen flag to restart the tour
     localStorage.removeItem('ak_chats_tour_seen');
-    
+
     if (onStartTour) {
       onStartTour();
     }
   };
+
+  // Only render the help button if showButton is true
+  if (!showButton) return null;
 
   return (
     <div className="fixed bottom-20 right-4 z-40">
@@ -72,7 +86,7 @@ const HelpButton = ({ onStartTour }) => {
                 </svg>
                 Start App Tour
               </button>
-              
+
               <a
                 href="https://github.com/yourusername/ak-chats"
                 target="_blank"

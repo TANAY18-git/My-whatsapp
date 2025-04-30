@@ -6,13 +6,15 @@ const WelcomeModal = ({ onStartTour, onSkipTour }) => {
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    // Check if this is the first time the user is visiting
-    const hasVisitedBefore = localStorage.getItem('ak_chats_visited');
+    // Check if this is a newly registered user
+    const isNewUser = localStorage.getItem('ak_chats_new_user');
 
-    if (!hasVisitedBefore) {
+    if (isNewUser === 'true') {
       // Show the welcome modal after a short delay
       const timer = setTimeout(() => {
         setIsVisible(true);
+        // Remove the new user flag after showing the welcome modal
+        localStorage.removeItem('ak_chats_new_user');
       }, 1000);
 
       return () => clearTimeout(timer);
@@ -21,7 +23,10 @@ const WelcomeModal = ({ onStartTour, onSkipTour }) => {
 
   const handleClose = () => {
     setIsVisible(false);
+    // Mark that the user has seen the welcome modal
     localStorage.setItem('ak_chats_visited', 'true');
+    // Ensure the new user flag is removed
+    localStorage.removeItem('ak_chats_new_user');
 
     if (onSkipTour) {
       onSkipTour();
@@ -30,7 +35,10 @@ const WelcomeModal = ({ onStartTour, onSkipTour }) => {
 
   const handleStartTour = () => {
     setIsVisible(false);
+    // Mark that the user has seen the welcome modal
     localStorage.setItem('ak_chats_visited', 'true');
+    // Ensure the new user flag is removed
+    localStorage.removeItem('ak_chats_new_user');
 
     if (onStartTour) {
       onStartTour();

@@ -7,10 +7,13 @@ const AppTour = ({ location, isMobile }) => {
   const [driverObj, setDriverObj] = useState(null);
   const [hasSeenTour, setHasSeenTour] = useState(false);
 
-  // Check if user has seen the tour before
+  // Check if user has seen the tour before or is not a new user
   useEffect(() => {
     const tourSeen = localStorage.getItem('ak_chats_tour_seen');
-    if (tourSeen) {
+    const isNewUser = localStorage.getItem('ak_chats_new_user');
+
+    // Only show tour if user hasn't seen it before AND is a new user
+    if (tourSeen || isNewUser !== 'true') {
       setHasSeenTour(true);
     }
   }, []);
