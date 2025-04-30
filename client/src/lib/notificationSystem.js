@@ -222,8 +222,15 @@ export const initNotifications = async () => {
   // Register service worker for background notifications
   if ('serviceWorker' in navigator) {
     try {
-      swRegistration = await navigator.serviceWorker.register('/service-worker.js');
+      // Register the service worker with a more specific scope
+      swRegistration = await navigator.serviceWorker.register('/service-worker.js', {
+        scope: '/'
+      });
       console.log('Service Worker registered with scope:', swRegistration.scope);
+
+      // Wait for the service worker to be ready
+      const serviceWorkerReady = await navigator.serviceWorker.ready;
+      console.log('Service Worker is ready:', serviceWorkerReady);
 
       // Create notification channels for Android
       if (swRegistration.pushManager) {
@@ -235,19 +242,50 @@ export const initNotifications = async () => {
             console.log('Setting up for Android notifications');
 
             // We'll use a custom event to tell the service worker about our notification preferences
-            swRegistration.active.postMessage({
-              type: 'SETUP_NOTIFICATION_CHANNEL',
-              channel: {
-                id: 'messages',
-                name: 'Messages',
-                description: 'Notifications for new messages',
-                importance: 'high'
-              }
-            });
+            if (swRegistration.active) {
+              swRegistration.active.postMessage({
+                type: 'SETUP_NOTIFICATION_CHANNEL',
+                channel: {
+                  id: 'messages',
+                  name: 'Messages',
+                  description: 'Notifications for new messages',
+                  importance: 'high'
+                }
+              });
+            } else {
+              console.warn('Service Worker is not active yet, will retry setup');
+              // Retry after a short delay
+              setTimeout(() => {
+                if (swRegistration.active) {
+                  swRegistration.active.postMessage({
+                    type: 'SETUP_NOTIFICATION_CHANNEL',
+                    channel: {
+                      id: 'messages',
+                      name: 'Messages',
+                      description: 'Notifications for new messages',
+                      importance: 'high'
+                    }
+                  });
+                }
+              }, 1000);
+            }
           } catch (error) {
             console.error('Error setting up Android notification channels:', error);
           }
         }
+      }
+
+      // Register for background sync if supported
+      if ('SyncManager' in window) {
+        try {
+          // Register for background sync
+          await serviceWorkerReady.sync.register('sync-messages');
+          console.log('Background sync registered for messages');
+        } catch (error) {
+          console.error('Error registering for background sync:', error);
+        }
+      } else {
+        console.warn('Background Sync is not supported in this browser');
       }
 
       // Listen for messages from the service worker
@@ -256,6 +294,12 @@ export const initNotifications = async () => {
 
         if (event.data && event.data.type === 'PLAY_NOTIFICATION_SOUND') {
           playNotificationSound();
+        }
+
+        // Handle sync offline messages request
+        if (event.data && event.data.type === 'SYNC_OFFLINE_MESSAGES') {
+          console.log('Received request to sync offline messages');
+          syncOfflineMessages();
         }
       });
     } catch (error) {
@@ -266,6 +310,73 @@ export const initNotifications = async () => {
   }
 
   console.log('Notification system initialized');
+};
+
+// Function to sync offline messages
+const syncOfflineMessages = async () => {
+  try {
+    // Check if we have any offline messages to sync
+    const offlineMessages = JSON.parse(localStorage.getItem('offline_messages') || '[]');
+
+    if (offlineMessages.length === 0) {
+      console.log('No offline messages to sync');
+      return;
+    }
+
+    console.log(`Found ${offlineMessages.length} offline messages to sync`);
+
+    // Get the user from localStorage
+    const user = JSON.parse(localStorage.getItem('whatsapp_user'));
+
+    if (!user || !user.token) {
+      console.error('User not logged in, cannot sync messages');
+      return;
+    }
+
+    // Try to send each message
+    for (const message of offlineMessages) {
+      if (message.synced) continue;
+
+      try {
+        // Determine the API endpoint based on message type
+        const isGroupMessage = message.groupId !== undefined;
+        const endpoint = isGroupMessage
+          ? `/api/groups/${message.groupId}/messages`
+          : '/api/messages';
+
+        // Send the message to the server
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${user.token}`
+          },
+          body: JSON.stringify(message)
+        });
+
+        if (response.ok) {
+          // Mark the message as synced
+          message.synced = true;
+          console.log(`Successfully synced message: ${message._id || 'new message'}`);
+        } else {
+          console.error(`Failed to sync message: ${await response.text()}`);
+        }
+      } catch (error) {
+        console.error('Error syncing message:', error);
+      }
+    }
+
+    // Update the offline messages in localStorage
+    localStorage.setItem('offline_messages', JSON.stringify(offlineMessages));
+
+    // Clean up synced messages
+    const unsynced = offlineMessages.filter(message => !message.synced);
+    localStorage.setItem('offline_messages', JSON.stringify(unsynced));
+
+    console.log(`Sync complete. ${offlineMessages.length - unsynced.length} messages synced, ${unsynced.length} remaining`);
+  } catch (error) {
+    console.error('Error in syncOfflineMessages:', error);
+  }
 };
 
 // Test notification system

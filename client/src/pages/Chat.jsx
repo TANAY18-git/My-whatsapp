@@ -72,11 +72,49 @@ const Chat = ({ user, setUser }) => {
 
   // Initialize socket connection
   useEffect(() => {
-    const newSocket = io(SOCKET_URL);
+    const newSocket = io(SOCKET_URL, {
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
+    });
     setSocket(newSocket);
 
     return () => {
       newSocket.disconnect();
+    };
+  }, []);
+
+  // Handle online/offline status
+  const [isAppOnline, setIsAppOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    // Set up event listeners for online/offline status
+    const handleOnline = () => {
+      console.log('App is online');
+      setIsAppOnline(true);
+
+      // Attempt to sync any offline messages
+      if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.sync.register('sync-messages')
+            .then(() => console.log('Background sync registered after coming online'))
+            .catch(err => console.error('Error registering background sync:', err));
+        });
+      }
+    };
+
+    const handleOffline = () => {
+      console.log('App is offline');
+      setIsAppOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
@@ -544,45 +582,120 @@ const Chat = ({ user, setUser }) => {
       sender: user._id,
       receiver: selectedContact._id,
       text: newMessage,
-      messageType: 'text'
+      messageType: 'text',
+      createdAt: new Date().toISOString()
     };
 
-    try {
-      const response = await axios.post(`${API_URL}/api/messages`, messageData, {
-        headers: { Authorization: `Bearer ${user.token}` }
-      });
+    // Create a temporary message ID for local tracking
+    const tempMessageId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
-      // Send message via socket with message ID
-      socket.emit('sendMessage', {
+    // Create a temporary message object for immediate display
+    const tempMessage = {
+      ...messageData,
+      _id: tempMessageId,
+      pending: true // Mark as pending until confirmed by server
+    };
+
+    // Add to messages immediately for better UX
+    setMessages([...messages, tempMessage]);
+    setNewMessage('');
+
+    // Scroll to bottom without animation
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+
+    // Stop typing indicator when message is sent
+    if (isTyping) {
+      setIsTyping(false);
+      socket.emit('stopTyping', {
         senderId: user._id,
-        receiverId: selectedContact._id,
-        text: newMessage,
-        messageType: 'text',
-        messageId: response.data._id
+        receiverId: selectedContact._id
       });
 
-      setMessages([...messages, response.data]);
-      setNewMessage('');
+      // Clear any existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
 
-      // Scroll to bottom without animation
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    // Check if we're online
+    const isOnline = navigator.onLine;
 
-      // Stop typing indicator when message is sent
-      if (isTyping) {
-        setIsTyping(false);
-        socket.emit('stopTyping', {
-          senderId: user._id,
-          receiverId: selectedContact._id
+    if (isOnline) {
+      // Online - send normally
+      try {
+        const response = await axios.post(`${API_URL}/api/messages`, messageData, {
+          headers: { Authorization: `Bearer ${user.token}` }
         });
 
-        // Clear any existing timeout
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-        }
+        // Send message via socket with message ID
+        socket.emit('sendMessage', {
+          senderId: user._id,
+          receiverId: selectedContact._id,
+          text: newMessage,
+          messageType: 'text',
+          messageId: response.data._id
+        });
+
+        // Replace the temporary message with the real one from the server
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === tempMessageId ? { ...response.data, pending: false } : msg
+          )
+        );
+      } catch (error) {
+        console.error('Error sending message:', error);
+
+        // Mark the message as failed
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === tempMessageId ? { ...msg, failed: true, pending: false } : msg
+          )
+        );
+
+        // Store for offline sync
+        storeMessageForOfflineSync(messageData);
+      }
+    } else {
+      // Offline - store for later sync
+      storeMessageForOfflineSync(messageData);
+
+      // Mark the message as pending (will be synced when online)
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg._id === tempMessageId ? { ...msg, offlinePending: true, pending: false } : msg
+        )
+      );
+    }
+  };
+
+  // Helper function to store messages for offline sync
+  const storeMessageForOfflineSync = (messageData) => {
+    try {
+      // Get existing offline messages
+      const offlineMessages = JSON.parse(localStorage.getItem('offline_messages') || '[]');
+
+      // Add this message
+      offlineMessages.push({
+        ...messageData,
+        timestamp: Date.now(),
+        synced: false
+      });
+
+      // Save back to localStorage
+      localStorage.setItem('offline_messages', JSON.stringify(offlineMessages));
+
+      console.log('Message stored for offline sync');
+
+      // Register for background sync if supported
+      if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.sync.register('sync-messages')
+            .then(() => console.log('Background sync registered'))
+            .catch(err => console.error('Error registering background sync:', err));
+        });
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
+      console.error('Error storing message for offline sync:', error);
     }
   };
 
@@ -704,6 +817,141 @@ const Chat = ({ user, setUser }) => {
   const handleMessageForwarded = () => {
     // You could add some notification or feedback here
     console.log('Message forwarded successfully');
+  };
+
+  // Handle retry for failed direct messages
+  const handleRetryMessage = async (message) => {
+    if (!message || !message.failed || !selectedContact) return;
+
+    // Create message data from the failed message
+    const messageData = {
+      sender: user._id,
+      receiver: selectedContact._id,
+      text: message.text,
+      messageType: message.messageType || 'text',
+      createdAt: new Date().toISOString()
+    };
+
+    // Mark the message as pending again
+    setMessages(prevMessages =>
+      prevMessages.map(msg =>
+        msg._id === message._id ? { ...msg, failed: false, pending: true } : msg
+      )
+    );
+
+    // Check if we're online
+    const isOnline = navigator.onLine;
+
+    if (isOnline) {
+      try {
+        // Try to send the message again
+        const response = await axios.post(`${API_URL}/api/messages`, messageData, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+
+        // Send message via socket with message ID
+        socket.emit('sendMessage', {
+          senderId: user._id,
+          receiverId: selectedContact._id,
+          text: message.text,
+          messageType: message.messageType || 'text',
+          messageId: response.data._id
+        });
+
+        // Replace the failed message with the successful one
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === message._id ? { ...response.data, pending: false } : msg
+          )
+        );
+
+        console.log('Message retry successful');
+      } catch (error) {
+        console.error('Error retrying message:', error);
+
+        // Mark the message as failed again
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === message._id ? { ...msg, failed: true, pending: false } : msg
+          )
+        );
+      }
+    } else {
+      // Still offline - mark as offline pending
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg._id === message._id ? { ...msg, failed: false, offlinePending: true, pending: false } : msg
+        )
+      );
+
+      // Store for offline sync
+      storeMessageForOfflineSync(messageData);
+    }
+  };
+
+  // Handle retry for failed group messages
+  const handleRetryGroupMessage = async (message) => {
+    if (!message || !message.failed || !selectedGroup) return;
+
+    // Create message data from the failed message
+    const messageData = {
+      text: message.text,
+      messageType: message.messageType || 'text',
+      createdAt: new Date().toISOString()
+    };
+
+    // Mark the message as pending again
+    setGroupMessages(prevMessages =>
+      prevMessages.map(msg =>
+        msg._id === message._id ? { ...msg, failed: false, pending: true } : msg
+      )
+    );
+
+    // Check if we're online
+    const isOnline = navigator.onLine;
+
+    if (isOnline) {
+      try {
+        // Try to send the message again
+        const response = await axios.post(`${API_URL}/api/groups/${selectedGroup._id}/messages`, messageData, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+
+        // Replace the failed message with the successful one
+        setGroupMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === message._id ? response.data : msg
+          )
+        );
+
+        // Emit socket event to notify group members
+        socket.emit('sendGroupMessage', {
+          groupId: selectedGroup._id,
+          message: response.data
+        });
+
+        console.log('Group message retry successful');
+      } catch (error) {
+        console.error('Error retrying group message:', error);
+
+        // Mark the message as failed again
+        setGroupMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === message._id ? { ...msg, failed: true, pending: false } : msg
+          )
+        );
+      }
+    } else {
+      // Still offline - mark as offline pending
+      setGroupMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg._id === message._id ? { ...msg, failed: false, offlinePending: true, pending: false } : msg
+        )
+      );
+
+      // Store for offline sync
+      storeGroupMessageForOfflineSync(messageData, selectedGroup._id);
+    }
   };
 
   // Handle reply to message
@@ -950,30 +1198,112 @@ const Chat = ({ user, setUser }) => {
       return;
     }
 
+    const messageData = {
+      text: newMessage,
+      messageType: 'text',
+      createdAt: new Date().toISOString()
+    };
+
+    // Create a temporary message ID for local tracking
+    const tempMessageId = `temp-group-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+    // Create a temporary message object for immediate display
+    const tempMessage = {
+      ...messageData,
+      _id: tempMessageId,
+      sender: {
+        _id: user._id,
+        name: user.name,
+        profilePhoto: user.profilePhoto
+      },
+      pending: true // Mark as pending until confirmed by server
+    };
+
+    // Add to messages immediately for better UX
+    setGroupMessages(prev => [...prev, tempMessage]);
+    setNewMessage('');
+
+    // Scroll to bottom without animation
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+
+    // Check if we're online
+    const isOnline = navigator.onLine;
+
+    if (isOnline) {
+      // Online - send normally
+      try {
+        // Send to server
+        const response = await axios.post(`${API_URL}/api/groups/${selectedGroup._id}/messages`, messageData, {
+          headers: { Authorization: `Bearer ${user.token}` }
+        });
+
+        // Replace the temporary message with the real one from the server
+        setGroupMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === tempMessageId ? response.data : msg
+          )
+        );
+
+        // Emit socket event to notify group members
+        socket.emit('sendGroupMessage', {
+          groupId: selectedGroup._id,
+          message: response.data
+        });
+      } catch (error) {
+        console.error('Error sending group message:', error);
+
+        // Mark the message as failed
+        setGroupMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg._id === tempMessageId ? { ...msg, failed: true, pending: false } : msg
+          )
+        );
+
+        // Store for offline sync
+        storeGroupMessageForOfflineSync(messageData, selectedGroup._id);
+      }
+    } else {
+      // Offline - store for later sync
+      storeGroupMessageForOfflineSync(messageData, selectedGroup._id);
+
+      // Mark the message as pending (will be synced when online)
+      setGroupMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg._id === tempMessageId ? { ...msg, offlinePending: true, pending: false } : msg
+        )
+      );
+    }
+  };
+
+  // Helper function to store group messages for offline sync
+  const storeGroupMessageForOfflineSync = (messageData, groupId) => {
     try {
-      // Send to server
-      const response = await axios.post(`${API_URL}/api/groups/${selectedGroup._id}/messages`, {
-        text: newMessage,
-        messageType: 'text',
-      }, {
-        headers: { Authorization: `Bearer ${user.token}` }
+      // Get existing offline messages
+      const offlineMessages = JSON.parse(localStorage.getItem('offline_messages') || '[]');
+
+      // Add this message
+      offlineMessages.push({
+        ...messageData,
+        groupId, // Add group ID for group messages
+        timestamp: Date.now(),
+        synced: false
       });
 
-      // Add message to UI
-      setGroupMessages(prev => [...prev, response.data]);
-      setNewMessage('');
+      // Save back to localStorage
+      localStorage.setItem('offline_messages', JSON.stringify(offlineMessages));
 
-      // Scroll to bottom without animation
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      console.log('Group message stored for offline sync');
 
-      // Emit socket event to notify group members
-      socket.emit('sendGroupMessage', {
-        groupId: selectedGroup._id,
-        message: response.data
-      });
+      // Register for background sync if supported
+      if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+          registration.sync.register('sync-messages')
+            .then(() => console.log('Background sync registered'))
+            .catch(err => console.error('Error registering background sync:', err));
+        });
+      }
     } catch (error) {
-      console.error('Error sending group message:', error);
-      alert('Failed to send message. Please try again.');
+      console.error('Error storing group message for offline sync:', error);
     }
   };
 
@@ -1142,6 +1472,22 @@ const Chat = ({ user, setUser }) => {
 
   return (
     <div className="flex h-screen relative" style={{ backgroundColor: 'var(--bg-main)' }}>
+      {/* Offline Indicator */}
+      {!isAppOnline && (
+        <div className="fixed top-0 left-0 right-0 bg-red-500 text-white text-center py-1 z-50 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+            <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+          </svg>
+          <span className="text-xs font-medium">You are offline. Messages will be sent when you're back online.</span>
+        </div>
+      )}
+
       {/* Sidebar - Contacts */}
       <AnimatePresence>
         {(showContacts || !mobileView) && (
@@ -1154,7 +1500,8 @@ const Chat = ({ user, setUser }) => {
             style={{
               backgroundColor: 'var(--bg-panel)',
               borderColor: 'var(--border-color)',
-              boxShadow: mobileView ? '0 4px 12px rgba(0, 0, 0, 0.15)' : 'none'
+              boxShadow: mobileView ? '0 4px 12px rgba(0, 0, 0, 0.15)' : 'none',
+              marginTop: !isAppOnline ? '24px' : '0'
             }}
           >
             {/* Top bar removed for mobile view */}
@@ -1601,9 +1948,15 @@ const Chat = ({ user, setUser }) => {
                           <div
                             className={`chat-bubble group ${message.sender === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
                             onContextMenu={(e) => handleMessageContextMenu(e, message)}
+                            onClick={() => {
+                              // Handle retry for failed messages
+                              if (message.failed && message.sender === user._id) {
+                                handleRetryMessage(message);
+                              }
+                            }}
                             style={{
                               opacity: message.isDeleted ? 0.7 : 1,
-                              cursor: message.isDeleted ? 'default' : 'context-menu'
+                              cursor: message.isDeleted ? 'default' : message.failed ? 'pointer' : 'context-menu'
                             }}
                           >
                             {message.isForwarded && !message.isDeleted && (
@@ -1711,7 +2064,24 @@ const Chat = ({ user, setUser }) => {
                               <div className="flex items-center space-x-1">
                                 {message.sender === user._id && !message.isDeleted && (
                                   <span className="text-xs">
-                                    {message.read || readMessages.includes(message._id) ? (
+                                    {message.pending ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="M12 6v6l4 2" />
+                                      </svg>
+                                    ) : message.failed ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                      </svg>
+                                    ) : message.offlinePending ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M2 12h5" />
+                                        <path d="M9 12h5" />
+                                        <path d="M16 12h6" />
+                                      </svg>
+                                    ) : message.read || readMessages.includes(message._id) ? (
                                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <path d="M18 6L7 17L2 12" />
                                         <path d="M22 10L11 21L9 19" />
@@ -1731,7 +2101,7 @@ const Chat = ({ user, setUser }) => {
                                     fontSize: mobileView ? '0.75rem' : '0.7rem'
                                   }}>
                                     {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    {message.sender === user._id && (
+                                    {message.sender === user._id && !message.pending && !message.failed && !message.offlinePending && (
                                       <span className="ml-1">
                                         {message.read || readMessages.includes(message._id) ? (
                                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1743,6 +2113,16 @@ const Chat = ({ user, setUser }) => {
                                             <path d="M5 12L10 17L20 7" />
                                           </svg>
                                         )}
+                                      </span>
+                                    )}
+                                    {message.failed && (
+                                      <span className="ml-1 text-red-500">
+                                        Tap to retry
+                                      </span>
+                                    )}
+                                    {message.offlinePending && (
+                                      <span className="ml-1 text-yellow-500">
+                                        Waiting for connection
                                       </span>
                                     )}
                                   </div>
@@ -2023,9 +2403,15 @@ const Chat = ({ user, setUser }) => {
                           <div
                             className={`chat-bubble group ${message.sender._id === user._id ? 'chat-bubble-sent' : 'chat-bubble-received'}`}
                             onContextMenu={(e) => handleGroupMessageContextMenu(e, message)}
+                            onClick={() => {
+                              // Handle retry for failed messages
+                              if (message.failed && message.sender._id === user._id) {
+                                handleRetryGroupMessage(message);
+                              }
+                            }}
                             style={{
                               opacity: message.isDeleted ? 0.7 : 1,
-                              cursor: message.isDeleted ? 'default' : 'context-menu'
+                              cursor: message.isDeleted ? 'default' : message.failed ? 'pointer' : 'context-menu'
                             }}
                           >
                             {message.sender._id !== user._id && !message.isDeleted && (
@@ -2136,16 +2522,54 @@ const Chat = ({ user, setUser }) => {
                                 )}
                               </div>
 
-                              {message.messageType !== 'voice' && (
-                                <div className="text-xs font-medium" style={{
-                                  color: message.sender._id === user._id ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.6)',
-                                  textAlign: 'right',
-                                  marginTop: '2px',
-                                  fontSize: mobileView ? '0.75rem' : '0.7rem'
-                                }}>
-                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              )}
+                              <div className="flex items-center space-x-1">
+                                {message.sender._id === user._id && !message.isDeleted && (
+                                  <span className="text-xs">
+                                    {message.pending ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="M12 6v6l4 2" />
+                                      </svg>
+                                    ) : message.failed ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                      </svg>
+                                    ) : message.offlinePending ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M2 12h5" />
+                                        <path d="M9 12h5" />
+                                        <path d="M16 12h6" />
+                                      </svg>
+                                    ) : (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M5 12L10 17L20 7" />
+                                      </svg>
+                                    )}
+                                  </span>
+                                )}
+                                {message.messageType !== 'voice' && (
+                                  <div className="text-xs font-medium" style={{
+                                    color: message.sender._id === user._id ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.6)',
+                                    textAlign: 'right',
+                                    marginTop: '2px',
+                                    fontSize: mobileView ? '0.75rem' : '0.7rem'
+                                  }}>
+                                    {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {message.failed && (
+                                      <span className="ml-1 text-red-500">
+                                        Tap to retry
+                                      </span>
+                                    )}
+                                    {message.offlinePending && (
+                                      <span className="ml-1 text-yellow-500">
+                                        Waiting for connection
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>

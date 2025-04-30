@@ -491,6 +491,48 @@ body {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Offline mode styles */
+body.offline {
+  position: relative;
+}
+
+body.offline::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(
+    to right,
+    #ff3b30 0%,
+    #ff3b30 50%,
+    transparent 50%,
+    transparent 100%
+  );
+  background-size: 20px 2px;
+  animation: slide 1s linear infinite;
+  z-index: 9999;
+}
+
+@keyframes slide {
+  from { background-position: 0 0; }
+  to { background-position: 20px 0; }
+}
+
+/* Message status indicators */
+.message-pending {
+  opacity: 0.8;
+}
+
+.message-failed {
+  border: 1px solid rgba(255, 59, 48, 0.5);
+}
+
+.message-offline-pending {
+  border: 1px solid rgba(255, 204, 0, 0.5);
+}
+
 /* Print styles */
 @media print {
   body {
