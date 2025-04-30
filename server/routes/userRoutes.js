@@ -17,6 +17,7 @@ const router = express.Router();
 router.get('/', protect, getUsers);
 router.get('/search', protect, searchUsers);
 router.get('/contacts', protect, getUserContacts);
+// Contact request routes
 router.get('/requests', protect, getPendingRequests);
 router.post('/requests', protect, sendContactRequest);
 router.post('/requests/accept', protect, acceptContactRequest);

@@ -203,13 +203,23 @@ const Chat = ({ user, setUser }) => {
 
   // Fetch pending requests count
   const fetchPendingRequestsCount = async () => {
+    if (!user || !user.token) return;
+
     try {
       const response = await axios.get(`${API_URL}/api/users/requests`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
-      setPendingRequestsCount(response.data.length);
+
+      if (response.data && Array.isArray(response.data)) {
+        setPendingRequestsCount(response.data.length);
+        console.log(`Fetched ${response.data.length} pending requests`);
+      } else {
+        console.error('Invalid response format for pending requests:', response.data);
+        setPendingRequestsCount(0);
+      }
     } catch (error) {
       console.error('Error fetching pending requests:', error);
+      setPendingRequestsCount(0);
     }
   };
 
@@ -1463,11 +1473,10 @@ const Chat = ({ user, setUser }) => {
                               ).map(([emoji, count]) => (
                                 <div
                                   key={emoji}
-                                  className={`flex items-center rounded-full px-2 py-0.5 text-xs ${
-                                    message.reactions.some(r => r.user === user._id && r.emoji === emoji)
-                                      ? 'bg-primary text-white'
-                                      : 'bg-gray-100 dark:bg-gray-700'
-                                  }`}
+                                  className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
+                                    ? 'bg-primary text-white'
+                                    : 'bg-gray-100 dark:bg-gray-700'
+                                    }`}
                                 >
                                   <span className="mr-1">{emoji}</span>
                                   {count > 1 && <span>{count}</span>}
@@ -1516,7 +1525,8 @@ const Chat = ({ user, setUser }) => {
                           </div>
                         </div>
                       </motion.div>
-                  ))}
+                    );
+                  })}
                   <div ref={messagesEndRef} />
                 </div>
               )}
@@ -1831,11 +1841,10 @@ const Chat = ({ user, setUser }) => {
                               ).map(([emoji, count]) => (
                                 <div
                                   key={emoji}
-                                  className={`flex items-center rounded-full px-2 py-0.5 text-xs ${
-                                    message.reactions.some(r => r.user === user._id && r.emoji === emoji)
-                                      ? 'bg-primary text-white'
-                                      : 'bg-gray-100 dark:bg-gray-700'
-                                  }`}
+                                  className={`flex items-center rounded-full px-2 py-0.5 text-xs ${message.reactions.some(r => r.user === user._id && r.emoji === emoji)
+                                    ? 'bg-primary text-white'
+                                    : 'bg-gray-100 dark:bg-gray-700'
+                                    }`}
                                 >
                                   <span className="mr-1">{emoji}</span>
                                   {count > 1 && <span>{count}</span>}
@@ -1868,7 +1877,8 @@ const Chat = ({ user, setUser }) => {
                           </div>
                         </div>
                       </motion.div>
-                  ))}
+                    );
+                  })}
                   <div ref={messagesEndRef} />
                 </div>
               )}

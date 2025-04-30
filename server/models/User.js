@@ -29,14 +29,17 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // User's contacts
     contacts: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     }],
+    // Pending contact requests received from other users
     pendingRequests: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     }],
+    // Contact requests sent to other users
     sentRequests: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
