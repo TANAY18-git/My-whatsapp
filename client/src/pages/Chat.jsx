@@ -1519,18 +1519,7 @@ const Chat = ({ user, setUser }) => {
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
                 </button>
-                {!mobileView && (
-                  <button
-                    onClick={handleBackNavigation}
-                    className="p-1.5 rounded-full hover:bg-gray-100/10 ml-1"
-                    title="Close chat"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                )}
+
               </div>
             </div>
 
@@ -1934,18 +1923,7 @@ const Chat = ({ user, setUser }) => {
                     <line x1="12" y1="8" x2="12.01" y2="8" />
                   </svg>
                 </button>
-                {!mobileView && (
-                  <button
-                    onClick={handleBackNavigation}
-                    className="p-1.5 rounded-full hover:bg-gray-100/10"
-                    title="Close chat"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                )}
+
               </div>
             </div>
 
