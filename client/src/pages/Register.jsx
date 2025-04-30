@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { FileUpload } from '../components/ui/file-upload';
+// FileUpload component removed
 import { API_URL } from '../config';
 
 const Register = ({ setUser }) => {
@@ -13,7 +13,7 @@ const Register = ({ setUser }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [profilePhoto, setProfilePhoto] = useState('');
+  // Profile photo state removed
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -34,8 +34,7 @@ const Register = ({ setUser }) => {
         name,
         email,
         username,
-        password,
-        profilePhoto
+        password
       });
 
       const userData = response.data;
@@ -62,14 +61,18 @@ const Register = ({ setUser }) => {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-primary rounded-full flex items-center justify-center mb-3 sm:mb-4"
+            className="mx-auto w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center mb-5 sm:mb-6"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:w-10 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-            </svg>
+            <div className="w-full h-full rounded-full overflow-hidden bg-gray-900 p-2 shadow-lg" style={{ boxShadow: '0 0 20px rgba(104, 109, 224, 0.5)' }}>
+              <img
+                src="/new-logo.jpg"
+                alt="AK Chats Logo"
+                className="w-full h-full object-contain rounded-full"
+              />
+            </div>
           </motion.div>
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Create Account</h2>
-          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">Sign up for WhatsApp Web</p>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">Sign up for AK Chats</p>
         </div>
 
         {error && (
@@ -155,16 +158,7 @@ const Register = ({ setUser }) => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Profile Photo
-              </label>
-              <FileUpload
-                onFileSelect={setProfilePhoto}
-                className="w-full text-sm"
-                buttonText="Choose Profile Photo"
-              />
-            </div>
+            {/* Profile photo upload removed */}
           </div>
 
           <Button

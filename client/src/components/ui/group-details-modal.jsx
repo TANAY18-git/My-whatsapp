@@ -3,12 +3,12 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { Button } from './button';
 import { Input } from './input';
-import { FileUpload } from './file-upload';
+// FileUpload component removed
 
 const GroupDetailsModal = ({ isOpen, onClose, group, user, onGroupUpdated, onLeaveGroup }) => {
   const [name, setName] = useState(group?.name || '');
   const [description, setDescription] = useState(group?.description || '');
-  const [groupPhoto, setGroupPhoto] = useState(group?.groupPhoto || '');
+  // Group photo state removed
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,8 +31,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, user, onGroupUpdated, onLea
         `http://localhost:5000/api/groups/${group._id}`,
         {
           name,
-          description,
-          groupPhoto
+          description
         },
         {
           headers: { Authorization: `Bearer ${user.token}` }
@@ -164,28 +163,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, user, onGroupUpdated, onLea
               />
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
-                Group Photo
-              </label>
-              <FileUpload
-                onFileSelect={setGroupPhoto}
-                buttonText="Choose Group Photo"
-                variant="outline"
-                size="sm"
-              />
-              {groupPhoto && (
-                <div className="mt-2 flex justify-center">
-                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary">
-                    <img
-                      src={groupPhoto}
-                      alt="Group"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Group photo upload removed */}
 
             <div className="flex justify-end space-x-3">
               <Button
@@ -193,7 +171,6 @@ const GroupDetailsModal = ({ isOpen, onClose, group, user, onGroupUpdated, onLea
                 onClick={() => {
                   setName(group.name);
                   setDescription(group.description);
-                  setGroupPhoto(group.groupPhoto);
                   setIsEditing(false);
                   setError('');
                 }}

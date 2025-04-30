@@ -3,13 +3,13 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { Button } from './button';
 import { Input } from './input';
-import { FileUpload } from './file-upload';
+// FileUpload component removed
 import { API_URL } from '../../config';
 
 const CreateGroupModal = ({ isOpen, onClose, user, onGroupCreated }) => {
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
-  const [groupPhoto, setGroupPhoto] = useState('');
+  // Group photo state removed
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -54,8 +54,7 @@ const CreateGroupModal = ({ isOpen, onClose, user, onGroupCreated }) => {
         {
           name: groupName,
           description: groupDescription,
-          members: selectedMembers,
-          groupPhoto
+          members: selectedMembers
         },
         {
           headers: { Authorization: `Bearer ${user.token}` }
@@ -84,7 +83,6 @@ const CreateGroupModal = ({ isOpen, onClose, user, onGroupCreated }) => {
   const resetForm = () => {
     setGroupName('');
     setGroupDescription('');
-    setGroupPhoto('');
     setSelectedMembers([]);
     setError('');
   };
@@ -134,28 +132,7 @@ const CreateGroupModal = ({ isOpen, onClose, user, onGroupCreated }) => {
           />
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
-            Group Photo
-          </label>
-          <FileUpload
-            onFileSelect={setGroupPhoto}
-            buttonText="Choose Group Photo"
-            variant="outline"
-            size="sm"
-          />
-          {groupPhoto && (
-            <div className="mt-2 flex justify-center">
-              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary">
-                <img
-                  src={groupPhoto}
-                  alt="Group"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Group photo upload removed */}
 
         <div className="mb-4">
           <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>

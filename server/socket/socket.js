@@ -1,11 +1,29 @@
 let users = [];
 
 const addUser = (userId, socketId) => {
-  !users.some((user) => user.userId === userId) &&
+  // Check if user already exists
+  const existingUserIndex = users.findIndex((user) => user.userId === userId);
+
+  if (existingUserIndex !== -1) {
+    // Update the socket ID if user already exists
+    users[existingUserIndex].socketId = socketId;
+    console.log(`Updated socket for user ${userId}`);
+  } else {
+    // Add new user
     users.push({ userId, socketId });
+    console.log(`Added new user ${userId} to online users`);
+  }
 };
 
 const removeUser = (socketId) => {
+  // Find user before removing to log who disconnected
+  const userToRemove = users.find((user) => user.socketId === socketId);
+
+  if (userToRemove) {
+    console.log(`Removing user ${userToRemove.userId} from online users`);
+  }
+
+  // Filter out the disconnected user
   users = users.filter((user) => user.socketId !== socketId);
 };
 
@@ -15,11 +33,19 @@ const getUser = (userId) => {
 
 const setupSocket = (io) => {
   io.on('connection', (socket) => {
-    console.log('A user connected');
+    console.log('A user connected with socket ID:', socket.id);
 
     // Add user when they connect
     socket.on('addUser', (userId) => {
+      if (!userId) {
+        console.log('Warning: Received addUser event without userId');
+        return;
+      }
+
+      console.log(`User ${userId} connected with socket ID ${socket.id}`);
       addUser(userId, socket.id);
+
+      // Broadcast updated online users list to all clients
       io.emit('getUsers', users);
     });
 
@@ -131,9 +157,19 @@ const setupSocket = (io) => {
 
     // Remove user when they disconnect
     socket.on('disconnect', () => {
-      console.log('A user disconnected');
+      console.log(`Socket ${socket.id} disconnected`);
+
+      // Find user before removing to log who disconnected
+      const userToRemove = users.find((user) => user.socketId === socket.id);
+      if (userToRemove) {
+        console.log(`User ${userToRemove.userId} went offline`);
+      }
+
       removeUser(socket.id);
+
+      // Broadcast updated online users list to all clients
       io.emit('getUsers', users);
+      console.log(`Current online users: ${users.length}`);
     });
   });
 };

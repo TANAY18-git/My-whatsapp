@@ -41,14 +41,17 @@ const fileFilter = (req, file, cb) => {
     } else {
       cb(new Error('Only audio files are allowed!'), false);
     }
+  } else if (file.mimetype.startsWith('image/')) {
+    // Reject all image uploads
+    cb(new Error('Image uploads are not allowed!'), false);
   } else {
-    // Default: accept all files
+    // Default: accept other files
     cb(null, true);
   }
 };
 
 // Initialize multer
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
