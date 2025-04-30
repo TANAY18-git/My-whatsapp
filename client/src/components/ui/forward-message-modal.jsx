@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { Button } from './button';
 import { Input } from './input';
+import { API_URL } from '../../config';
 
 const ForwardMessageModal = ({ isOpen, onClose, user, message, onMessageForwarded }) => {
   const [contacts, setContacts] = useState([]);
@@ -21,12 +22,12 @@ const ForwardMessageModal = ({ isOpen, onClose, user, message, onMessageForwarde
       setLoading(true);
       try {
         // Fetch contacts
-        const contactsResponse = await axios.get('http://localhost:5000/api/users', {
+        const contactsResponse = await axios.get(`${API_URL}/api/users`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
 
         // Fetch groups
-        const groupsResponse = await axios.get('http://localhost:5000/api/groups', {
+        const groupsResponse = await axios.get(`${API_URL}/api/groups`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
 
@@ -58,7 +59,7 @@ const ForwardMessageModal = ({ isOpen, onClose, user, message, onMessageForwarde
         if (recipient.type === 'contact') {
           // Forward to direct contact
           return axios.post(
-            'http://localhost:5000/api/messages/forward',
+            `${API_URL}/api/messages/forward`,
             {
               messageId: message._id,
               receiverId: recipient.id,
@@ -71,7 +72,7 @@ const ForwardMessageModal = ({ isOpen, onClose, user, message, onMessageForwarde
         } else {
           // Forward to group
           return axios.post(
-            `http://localhost:5000/api/groups/${recipient.id}/messages/forward`,
+            `${API_URL}/api/groups/${recipient.id}/messages/forward`,
             {
               messageId: message._id,
               messageType: message.group ? 'group' : 'direct'

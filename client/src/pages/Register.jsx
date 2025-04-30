@@ -5,6 +5,7 @@ import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { FileUpload } from '../components/ui/file-upload';
+import { API_URL } from '../config';
 
 const Register = ({ setUser }) => {
   const [name, setName] = useState('');
@@ -28,7 +29,7 @@ const Register = ({ setUser }) => {
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/register', {
+      const response = await axios.post(`${API_URL}/api/auth/register`, {
         name,
         email,
         password,

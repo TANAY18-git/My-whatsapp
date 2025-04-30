@@ -23,7 +23,10 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://my-whatsapp-i0o2.onrender.com'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Serve static files
@@ -45,8 +48,9 @@ const server = http.createServer(app);
 // Socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:5173', // Vite default port
+    origin: ['http://localhost:5173', 'https://my-whatsapp-i0o2.onrender.com'], // Allow both local and production frontend
     methods: ['GET', 'POST'],
+    credentials: true
   },
 });
 

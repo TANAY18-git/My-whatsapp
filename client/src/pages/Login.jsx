@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { API_URL } from '../config';
 
 const Login = ({ setUser }) => {
   const [email, setEmail] = useState('');
@@ -18,7 +19,7 @@ const Login = ({ setUser }) => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/login', {
+      const response = await axios.post(`${API_URL}/api/auth/login`, {
         email,
         password
       });

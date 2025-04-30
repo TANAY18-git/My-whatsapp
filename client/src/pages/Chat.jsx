@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 import axios from 'axios';
+import { API_URL, SOCKET_URL } from '../config';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { FileUpload } from '../components/ui/file-upload';
@@ -63,7 +64,7 @@ const Chat = ({ user, setUser }) => {
 
   // Initialize socket connection
   useEffect(() => {
-    const newSocket = io('http://localhost:5000');
+    const newSocket = io(SOCKET_URL);
     setSocket(newSocket);
 
     return () => {
@@ -200,13 +201,13 @@ const Chat = ({ user, setUser }) => {
     const fetchData = async () => {
       try {
         // Fetch contacts
-        const contactsResponse = await axios.get('http://localhost:5000/api/users', {
+        const contactsResponse = await axios.get(`${API_URL}/api/users`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         setContacts(contactsResponse.data);
 
         // Fetch groups
-        const groupsResponse = await axios.get('http://localhost:5000/api/groups', {
+        const groupsResponse = await axios.get(`${API_URL}/api/groups`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         setGroups(groupsResponse.data);
@@ -229,13 +230,13 @@ const Chat = ({ user, setUser }) => {
       if (!selectedContact || !socket) return;
 
       try {
-        const response = await axios.get(`http://localhost:5000/api/messages/${selectedContact._id}`, {
+        const response = await axios.get(`${API_URL}/api/messages/${selectedContact._id}`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         setMessages(response.data);
 
         // Mark messages as read when conversation is opened
-        await axios.put(`http://localhost:5000/api/messages/read/${selectedContact._id}`, {}, {
+        await axios.put(`${API_URL}/api/messages/read/${selectedContact._id}`, {}, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
 
@@ -274,13 +275,13 @@ const Chat = ({ user, setUser }) => {
       }
 
       try {
-        const response = await axios.get(`http://localhost:5000/api/groups/${selectedGroup._id}/messages`, {
+        const response = await axios.get(`${API_URL}/api/groups/${selectedGroup._id}/messages`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         setGroupMessages(response.data);
 
         // Mark messages as read
-        await axios.put(`http://localhost:5000/api/groups/${selectedGroup._id}/messages/read`, {}, {
+        await axios.put(`${API_URL}/api/groups/${selectedGroup._id}/messages/read`, {}, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
       } catch (error) {
@@ -327,7 +328,7 @@ const Chat = ({ user, setUser }) => {
     };
 
     try {
-      const response = await axios.post('http://localhost:5000/api/messages', messageData, {
+      const response = await axios.post(`${API_URL}/api/messages`, messageData, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
 
@@ -377,7 +378,7 @@ const Chat = ({ user, setUser }) => {
       formData.append('voice', audioBlob, 'voice-message.webm');
 
       // Upload the voice file
-      const uploadResponse = await axios.post('http://localhost:5000/api/upload/voice', formData, {
+      const uploadResponse = await axios.post(`${API_URL}/api/upload/voice`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${user.token}`
@@ -390,7 +391,7 @@ const Chat = ({ user, setUser }) => {
       const duration = Math.round(audioBlob.size / 16000); // Rough estimate: size/16kbps
 
       // Send to server
-      const response = await axios.post('http://localhost:5000/api/messages', {
+      const response = await axios.post(`${API_URL}/api/messages`, {
         receiver: selectedContact._id,
         voiceUrl,
         duration,
@@ -529,7 +530,7 @@ const Chat = ({ user, setUser }) => {
         replyTo: selectedMessage._id
       };
 
-      const response = await axios.post('http://localhost:5000/api/messages', messageData, {
+      const response = await axios.post(`${API_URL}/api/messages`, messageData, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
 
@@ -570,7 +571,7 @@ const Chat = ({ user, setUser }) => {
         replyTo: selectedMessage._id
       };
 
-      const response = await axios.post(`http://localhost:5000/api/groups/${selectedGroup._id}/messages`, messageData, {
+      const response = await axios.post(`${API_URL}/api/groups/${selectedGroup._id}/messages`, messageData, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
 
@@ -707,7 +708,7 @@ const Chat = ({ user, setUser }) => {
       if (selectedContact) {
         // Direct message reaction
         const response = await axios.post(
-          `http://localhost:5000/api/messages/${messageForReaction._id}/reactions`,
+          `${API_URL}/api/messages/${messageForReaction._id}/reactions`,
           { emoji },
           { headers: { Authorization: `Bearer ${user.token}` } }
         );
@@ -726,7 +727,7 @@ const Chat = ({ user, setUser }) => {
       } else if (selectedGroup) {
         // Group message reaction
         const response = await axios.post(
-          `http://localhost:5000/api/groups/${selectedGroup._id}/messages/${messageForReaction._id}/reactions`,
+          `${API_URL}/api/groups/${selectedGroup._id}/messages/${messageForReaction._id}/reactions`,
           { emoji },
           { headers: { Authorization: `Bearer ${user.token}` } }
         );
@@ -762,7 +763,7 @@ const Chat = ({ user, setUser }) => {
 
     try {
       // Send to server
-      const response = await axios.post(`http://localhost:5000/api/groups/${selectedGroup._id}/messages`, {
+      const response = await axios.post(`${API_URL}/api/groups/${selectedGroup._id}/messages`, {
         text: newMessage,
         messageType: 'text',
       }, {
@@ -799,7 +800,7 @@ const Chat = ({ user, setUser }) => {
       formData.append('voice', audioBlob, 'voice-message.webm');
 
       // Upload the voice file
-      const uploadResponse = await axios.post('http://localhost:5000/api/upload/voice', formData, {
+      const uploadResponse = await axios.post(`${API_URL}/api/upload/voice`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${user.token}`
@@ -812,7 +813,7 @@ const Chat = ({ user, setUser }) => {
       const duration = Math.round(audioBlob.size / 16000); // Rough estimate: size/16kbps
 
       // Send to server
-      const response = await axios.post(`http://localhost:5000/api/groups/${selectedGroup._id}/messages`, {
+      const response = await axios.post(`${API_URL}/api/groups/${selectedGroup._id}/messages`, {
         voiceUrl,
         duration,
         messageType: 'voice',
@@ -859,7 +860,7 @@ const Chat = ({ user, setUser }) => {
       const deleteFor = deleteType === 'everyone' ? 'everyone' : 'me';
 
       // Call API to delete message
-      await axios.delete(`http://localhost:5000/api/groups/${selectedGroup._id}/messages/${selectedMessage._id}?deleteFor=${deleteFor}`, {
+      await axios.delete(`${API_URL}/api/groups/${selectedGroup._id}/messages/${selectedMessage._id}?deleteFor=${deleteFor}`, {
         headers: { Authorization: `Bearer ${user.token}` }
       });
 
@@ -909,7 +910,7 @@ const Chat = ({ user, setUser }) => {
         const deleteFor = deleteType === 'everyone' ? 'everyone' : 'me';
 
         // Call API to delete message
-        await axios.delete(`http://localhost:5000/api/messages/${selectedMessage._id}?deleteFor=${deleteFor}`, {
+        await axios.delete(`${API_URL}/api/messages/${selectedMessage._id}?deleteFor=${deleteFor}`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
 

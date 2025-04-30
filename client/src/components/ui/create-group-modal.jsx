@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Button } from './button';
 import { Input } from './input';
 import { FileUpload } from './file-upload';
+import { API_URL } from '../../config';
 
 const CreateGroupModal = ({ isOpen, onClose, user, onGroupCreated }) => {
   const [groupName, setGroupName] = useState('');
@@ -18,7 +19,7 @@ const CreateGroupModal = ({ isOpen, onClose, user, onGroupCreated }) => {
   useEffect(() => {
     const fetchContacts = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/users', {
+        const response = await axios.get(`${API_URL}/api/users`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         setContacts(response.data);
@@ -49,7 +50,7 @@ const CreateGroupModal = ({ isOpen, onClose, user, onGroupCreated }) => {
 
     try {
       const response = await axios.post(
-        'http://localhost:5000/api/groups',
+        `${API_URL}/api/groups`,
         {
           name: groupName,
           description: groupDescription,
