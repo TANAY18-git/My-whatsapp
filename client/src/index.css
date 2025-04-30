@@ -4,35 +4,35 @@
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --color-primary: #128C7E;
-  --color-secondary: #25D366;
-  --color-light: #DCF8C6;
-  --color-dark: #075E54;
-  --color-accent: #34B7F1;
+  --color-primary: #6D28D9;
+  --color-secondary: #8B5CF6;
+  --color-light: #EDE9FE;
+  --color-dark: #4C1D95;
+  --color-accent: #C4B5FD;
 
   /* Theme variables */
   --bg-panel: #ffffff;
-  --bg-hover: #f5f5f5;
+  --bg-hover: #F5F3FF;
   --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --border-color: #e5e7eb;
+  --text-secondary: #6B7280;
+  --border-color: #E5E7EB;
   --input-bg: #ffffff;
-  --chat-bg: #f0f2f5;
+  --chat-bg: #F3F4F6;
 }
 
 [data-theme="dark"] {
-  --bg-panel: #2a1957;
-  --bg-hover: #3a2967;
-  --text-primary: #f3f4f6;
-  --text-secondary: #d1d5db;
-  --border-color: #4b5563;
-  --input-bg: #3a2967;
-  --chat-bg: #1f1147;
+  --bg-panel: #312E81;
+  --bg-hover: #4338CA;
+  --text-primary: #F9FAFB;
+  --text-secondary: #E5E7EB;
+  --border-color: #4F46E5;
+  --input-bg: #4338CA;
+  --chat-bg: #1E1B4B;
 }
 
 body {
-  background-color: #f3f4f6;
-  color: #111827;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
   min-height: 100vh;
 }
 
