@@ -1,6 +1,11 @@
 // Build script for Render deployment
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory name
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Create a .env file for production build
 const envContent = `VITE_API_URL=https://my-whatsapp-backend-iku0.onrender.com
