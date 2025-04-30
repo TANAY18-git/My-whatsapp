@@ -90,27 +90,19 @@ const ProfilePage = ({ user, setUser }) => {
     setMessage({ type: '', text: '' });
 
     try {
-      // In a real app, you would send this to your backend
-      // const response = await axios.put(`${API_URL}/api/users/profile`, {
-      //   name: name,
-      //   username: username
-      // }, {
-      //   headers: { Authorization: `Bearer ${user.token}` }
-      // });
-
-      console.log('Updating profile with:', {
-        name,
-        username,
-        profilePhoto: profilePhoto ? 'set' : 'not set'
-      });
-
-      // For now, we'll just update the local state
-      const updatedUser = {
-        ...user,
+      // Send update to backend
+      const response = await axios.put(`${API_URL}/api/users/profile`, {
         name: name,
         username: username,
         profilePhoto: profilePhoto
-      };
+      }, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+
+      console.log('Profile updated on server:', response.data);
+
+      // Get the updated user data from the response
+      const updatedUser = response.data;
 
       // Update localStorage
       const userDataString = JSON.stringify(updatedUser);
@@ -173,35 +165,27 @@ const ProfilePage = ({ user, setUser }) => {
     setMessage({ type: '', text: '' });
 
     try {
-      // In a real app, you would send this to your backend
-      // const response = await axios.put(`${API_URL}/api/users/password`, {
-      //   currentPassword,
-      //   newPassword
-      // }, {
-      //   headers: { Authorization: `Bearer ${user.token}` }
-      // });
+      // Send password change request to backend
+      const response = await axios.put(`${API_URL}/api/users/password`, {
+        currentPassword,
+        newPassword
+      }, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
 
-      console.log('Changing password...');
+      console.log('Password change response:', response.data);
 
-      // For demo purposes - simulate password change
-      // In a real app, this would be handled by the backend
+      // Update the user in localStorage with password change timestamp
       const updatedUser = { ...user, passwordLastChanged: new Date().toISOString() };
+      localStorage.setItem('whatsapp_user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
 
-      try {
-        // Update the user in localStorage with password change timestamp
-        localStorage.setItem('whatsapp_user', JSON.stringify(updatedUser));
-        setUser(updatedUser);
-
-        // Clear password fields and show success message
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setMessage({ type: 'success', text: 'Password changed successfully!' });
-        console.log('Password changed successfully');
-      } catch (storageError) {
-        console.error('localStorage error:', storageError);
-        setMessage({ type: 'error', text: 'Failed to update password information.' });
-      }
+      // Clear password fields and show success message
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setMessage({ type: 'success', text: 'Password changed successfully!' });
+      console.log('Password changed successfully');
 
       setLoading(false);
     } catch (error) {

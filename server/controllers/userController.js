@@ -1,5 +1,89 @@
 const User = require('../models/User');
 
+// @desc    Change user password
+// @route   PUT /api/users/password
+// @access  Private
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user._id;
+
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current password and new password are required' });
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if current password is correct
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Update user profile
+// @route   PUT /api/users/profile
+// @access  Private
+const updateProfile = async (req, res) => {
+  try {
+    const { name, username, profilePhoto } = req.body;
+    const userId = req.user._id;
+
+    // Check if username is already taken by another user
+    if (username) {
+      const existingUser = await User.findOne({ username, _id: { $ne: userId } });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Username already taken' });
+      }
+    }
+
+    // Find and update user
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update fields if provided
+    if (name) user.name = name;
+    if (username) user.username = username;
+    if (profilePhoto) user.profilePhoto = profilePhoto;
+
+    // Save updated user
+    const updatedUser = await user.save();
+
+    // Return updated user without password
+    const userResponse = {
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      username: updatedUser.username,
+      profilePhoto: updatedUser.profilePhoto,
+      token: req.user.token // Keep the existing token
+    };
+
+    res.json(userResponse);
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // @desc    Get all users except current user
 // @route   GET /api/users
 // @access  Private
@@ -313,5 +397,7 @@ module.exports = {
   acceptContactRequest,
   rejectContactRequest,
   getPendingRequests,
-  cancelContactRequest
+  cancelContactRequest,
+  updateProfile,
+  changePassword
 };
