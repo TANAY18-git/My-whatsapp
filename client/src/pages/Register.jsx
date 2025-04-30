@@ -9,6 +9,7 @@ import { API_URL } from '../config';
 
 const Register = ({ setUser }) => {
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,13 +33,12 @@ const Register = ({ setUser }) => {
       const response = await axios.post(`${API_URL}/api/auth/register`, {
         name,
         email,
+        username,
         password,
         profilePhoto
       });
 
       const userData = response.data;
-      // Add profile photo to user data before storing
-      userData.profilePhoto = profilePhoto;
       localStorage.setItem('whatsapp_user', JSON.stringify(userData));
       setUser(userData);
       navigate('/');
@@ -95,6 +95,20 @@ const Register = ({ setUser }) => {
                 onChange={(e) => setName(e.target.value)}
                 required
                 placeholder="Enter your full name"
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                Username
+              </label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                placeholder="Choose a username"
                 className="w-full"
               />
             </div>

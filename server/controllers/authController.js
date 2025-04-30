@@ -6,13 +6,32 @@ const generateToken = require('../utils/generateToken');
 // @access  Public
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, username } = req.body;
 
-    // Check if user already exists
-    const userExists = await User.findOne({ email });
+    // Check if user already exists with the same email
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      return res.status(400).json({ message: 'Email already in use' });
+    }
 
-    if (userExists) {
-      return res.status(400).json({ message: 'User already exists' });
+    // Check if username is already taken
+    const usernameExists = await User.findOne({ username });
+    if (usernameExists) {
+      return res.status(400).json({ message: 'Username already taken' });
+    }
+
+    // Generate username if not provided
+    let finalUsername = username;
+    if (!finalUsername) {
+      // Create a username from email (part before @)
+      finalUsername = email.split('@')[0];
+
+      // Check if this auto-generated username exists
+      const autoUsernameExists = await User.findOne({ username: finalUsername });
+      if (autoUsernameExists) {
+        // Add random numbers to make it unique
+        finalUsername = `${finalUsername}${Math.floor(Math.random() * 10000)}`;
+      }
     }
 
     // Create new user
@@ -20,6 +39,8 @@ const registerUser = async (req, res) => {
       name,
       email,
       password,
+      username: finalUsername,
+      contacts: []
     });
 
     if (user) {
@@ -27,6 +48,8 @@ const registerUser = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        username: user.username,
+        profilePhoto: user.profilePhoto,
         token: generateToken(user._id),
       });
     } else {
@@ -53,6 +76,8 @@ const loginUser = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        username: user.username,
+        profilePhoto: user.profilePhoto || '',
         token: generateToken(user._id),
       });
     } else {

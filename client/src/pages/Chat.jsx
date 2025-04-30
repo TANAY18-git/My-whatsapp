@@ -17,6 +17,7 @@ import CreateGroupModal from '../components/ui/create-group-modal';
 import GroupDetailsModal from '../components/ui/group-details-modal';
 import ForwardMessageModal from '../components/ui/forward-message-modal';
 import ReplyMessageModal from '../components/ui/reply-message-modal';
+import AddContactModal from '../components/ui/add-contact-modal';
 import { isStringTooLargeForLocalStorage } from '../lib/imageUtils';
 
 const Chat = ({ user, setUser }) => {
@@ -57,6 +58,7 @@ const Chat = ({ user, setUser }) => {
   const [groupMessages, setGroupMessages] = useState([]);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [showGroupDetailsModal, setShowGroupDetailsModal] = useState(false);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
   const searchResultRefs = useRef({});
@@ -200,8 +202,8 @@ const Chat = ({ user, setUser }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch contacts
-        const contactsResponse = await axios.get(`${API_URL}/api/users`, {
+        // Fetch only added contacts
+        const contactsResponse = await axios.get(`${API_URL}/api/users/contacts`, {
           headers: { Authorization: `Bearer ${user.token}` }
         });
         setContacts(contactsResponse.data);
@@ -1014,6 +1016,18 @@ const Chat = ({ user, setUser }) => {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Chats</h2>
                 <div className="flex space-x-2">
+                  <button
+                    onClick={() => setShowAddContactModal(true)}
+                    className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                    title="Add Contact"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--text-primary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="8.5" cy="7" r="4" />
+                      <line x1="20" y1="8" x2="20" y2="14" />
+                      <line x1="23" y1="11" x2="17" y2="11" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => setShowCreateGroupModal(true)}
                     className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -1950,6 +1964,20 @@ const Chat = ({ user, setUser }) => {
           setSelectedGroup(newGroup);
           setSelectedContact(null);
           setShowCreateGroupModal(false);
+        }}
+      />
+
+      {/* Add Contact Modal */}
+      <AddContactModal
+        isOpen={showAddContactModal}
+        onClose={() => setShowAddContactModal(false)}
+        user={user}
+        onContactAdded={(newContact) => {
+          // Check if contact already exists
+          if (!contacts.some(contact => contact._id === newContact._id)) {
+            setContacts(prev => [newContact, ...prev]);
+          }
+          setShowAddContactModal(false);
         }}
       />
 
