@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import AppTour from './AppTour';
 import WelcomeModal from './WelcomeModal';
-import HelpButton from './HelpButton';
 import TipManager from './TipManager';
 
 const AppWrapper = ({ children }) => {
@@ -57,9 +56,6 @@ const AppWrapper = ({ children }) => {
           localStorage.setItem('ak_chats_tour_seen', 'true');
         }}
       />
-
-      {/* Help button to restart tour */}
-      <HelpButton onStartTour={handleStartTour} />
 
       {/* App tour */}
       {tourLocation && (
