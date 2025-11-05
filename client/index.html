@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/new-logo.jpg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A85FF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>AK Chats - WhatsApp Web Clone</title>
+    <!-- Production-ready Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Custom styles for WhatsApp Web colors -->
+    <style>
+      :root {
+        /* Light theme colors - WhatsApp style */
+        --color-primary: #00A884;
+        --color-secondary: #00A884;
+        --color-light: #D9FDD3;
+        --color-dark: #008069;
+        --color-accent: #00A884;
+
+        /* UI colors - WhatsApp light theme */
+        --bg-main: #FFFFFF;
+        --bg-panel: #F0F2F5;
+        --bg-hover: #F0F2F5;
+        --text-primary: #111B21;
+        --text-secondary: #667781;
+        --border-color: #E9EDEF;
+        --chat-bg: #EFEAE2;
+        --bubble-sent: #D9FDD3;
+        --bubble-received: #FFFFFF;
+      }
+
+      /* Dark theme colors - WhatsApp style */
+      [data-theme="dark"] {
+        --color-primary: #00A884;
+        --color-secondary: #00A884;
+        --color-light: #005C4B;
+        --color-dark: #00806A;
+        --color-accent: #00A884;
+
+        /* UI colors - WhatsApp dark theme */
+        --bg-main: #111B21;
+        --bg-panel: #202C33;
+        --bg-hover: #2A3942;
+        --text-primary: #E9EDEF;
+        --text-secondary: #8696A0;
+        --border-color: #222E35;
+        --chat-bg: #0B141A;
+        --bubble-sent: #005C4B;
+        --bubble-received: #202C33;
+      }
+
+      /* Utility classes */
+      .bg-primary { background-color: var(--color-primary); }
+      .bg-secondary { background-color: var(--color-secondary); }
+      .bg-light { background-color: var(--color-light); }
+      .bg-dark { background-color: var(--color-dark); }
+      .bg-accent { background-color: var(--color-accent); }
+      .text-primary { color: var(--color-primary); }
+      .text-secondary { color: var(--color-secondary); }
+      .text-light { color: var(--color-light); }
+      .text-dark { color: var(--color-dark); }
+      .text-accent { color: var(--color-accent); }
+
+      /* Chat bubble styles - WhatsApp style */
+      .chat-bubble {
+        max-width: 75%;
+        padding: 6px 9px 8px 9px;
+        border-radius: 7.5px;
+        position: relative;
+        margin-bottom: 2px;
+        word-wrap: break-word;
+        box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+      }
+
+      .chat-bubble-sent {
+        background-color: var(--bubble-sent);
+        margin-left: auto;
+        border-radius: 7.5px;
+        color: var(--text-primary);
+      }
+
+      .chat-bubble-received {
+        background-color: var(--bubble-received);
+        margin-right: auto;
+        border-radius: 7.5px;
+        color: var(--text-primary);
+      }
+
+      /* Apply theme colors to body */
+      body {
+        background-color: var(--bg-main);
+        color: var(--text-primary);
+      }
+
+      /* WhatsApp chat background pattern */
+      .whatsapp-chat-bg {
+        background-color: var(--chat-bg);
+        background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAAFHGlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4gPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNS42LWMxNDIgNzkuMTYwOTI0LCAyMDE3LzA3LzEzLTAxOjA2OjM5ICAgICAgICAiPiA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPiA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIiB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyIgeG1sbnM6cGhvdG9zaG9wPSJodHRwOi8vbnMuYWRvYmUuY29tL3Bob3Rvc2hvcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RFdnQ9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZUV2ZW50IyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgQ0MgKFdpbmRvd3MpIiB4bXA6Q3JlYXRlRGF0ZT0iMjAyMC0wNS0yOVQxNDo1ODozOSswMjowMCIgeG1wOk1vZGlmeURhdGU9IjIwMjAtMDUtMjlUMTU6MDI6MjErMDI6MDAiIHhtcDpNZXRhZGF0YURhdGU9IjIwMjAtMDUtMjlUMTU6MDI6MjErMDI6MDAiIGRjOmZvcm1hdD0iaW1hZ2UvcG5nIiBwaG90b3Nob3A6Q29sb3JNb2RlPSIzIiBwaG90b3Nob3A6SUNDUHJvZmlsZT0ic1JHQiBJRUM2MTk2Ni0yLjEiIHhtcE1NOkluc3RhbmNlSUQ9InhtcC5paWQ6YzI0MGRmNzQtY2FmMy0yMjRkLWJiYmUtNDk3OGU1ZWNhZjg1IiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOmMyNDBkZjc0LWNhZjMtMjI0ZC1iYmJlLTQ5NzhlNWVjYWY4NSIgeG1wTU06T3JpZ2luYWxEb2N1bWVudElEPSJ4bXAuZGlkOmMyNDBkZjc0LWNhZjMtMjI0ZC1iYmJlLTQ5NzhlNWVjYWY4NSI+IDx4bXBNTTpIaXN0b3J5PiA8cmRmOlNlcT4gPHJkZjpsaSBzdEV2dDphY3Rpb249ImNyZWF0ZWQiIHN0RXZ0Omluc3RhbmNlSUQ9InhtcC5paWQ6YzI0MGRmNzQtY2FmMy0yMjRkLWJiYmUtNDk3OGU1ZWNhZjg1IiBzdEV2dDp3aGVuPSIyMDIwLTA1LTI5VDE0OjU4OjM5KzAyOjAwIiBzdEV2dDpzb2Z0d2FyZUFnZW50PSJBZG9iZSBQaG90b3Nob3AgQ0MgKFdpbmRvd3MpIi8+IDwvcmRmOlNlcT4gPC94bXBNTTpIaXN0b3J5PiA8L3JkZjpEZXNjcmlwdGlvbj4gPC9yZGY6UkRGPiA8L3g6eG1wbWV0YT4gPD94cGFja2V0IGVuZD0iciI/PiLMABIAAAGCSURBVGiB7ZnBbsIwEETfOiCBUFtx4ND//7H0wAEhlSpIpRKHHUAcTIgTx3a8Rn3SHKLEb8YJ9q4jQkXjEXgFpkCv0X5pLIFvYAaUvQZeqYlYA2PgBai8Bm/ZfAIL4B2Y+wjMgSGw8hGQoZVlGMkhKsvQyjKMpBSVZWhlGUZSisoytLIMIylFZRlaWYaRlKKyDK0sw0hKUVmGVpZhJKWoLEMryzCSUlSWoZVlGEkpKsvQyjKMpBSVZWhlGUZSisoytLIMIylFZRlaWYaRlKKyDK0sw0hKUVmGVpZhJKWoLEMryzCSUlSWoZVlGEkpKsvQyjKMpBSVZWhlGUZSisoytLIMIylFZRlaWYaRlKKyDK0sw0hKUVmGVpZhJKWoLEMryzCSUlSWoZVlGEkpKsvQyjKMpBSVZWhlGUZSisoytLIMIylFZRlaWYaRlKKyDK0sw0hKUVmGVpZhJKWoLEMryzCSUlSWoZVlGEkpKsvQyjKMpBSVZWhlGUZSisoytPLDG/kBvAFjn4EfwwXwCZR7jfwCUX1OwQx8FH8AAAAASUVORK5CYII=");
+        opacity: 0.06;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+
+      /* Typing indicator animation */
+      .typing-animation {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .typing-animation .dot {
+        display: inline-block;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        margin: 0 1px;
+        background-color: var(--text-secondary);
+        animation: typingAnimation 1.4s infinite ease-in-out;
+      }
+
+      .typing-animation .dot:nth-child(1) {
+        animation-delay: 0s;
+      }
+
+      .typing-animation .dot:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      .typing-animation .dot:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+
+      @keyframes typingAnimation {
+        0%, 60%, 100% {
+          transform: translateY(0);
+        }
+        30% {
+          transform: translateY(-4px);
+        }
+      }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
